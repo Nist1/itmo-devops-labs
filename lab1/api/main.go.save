@@ -1,0 +1,21 @@
+// Сервис API для лабы 1
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+)
+
+func main() {
+	addr := os.Getenv("ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+
+	http.HandleFunc("/health", handleHealth)
+	ssh -l nist 46.21.245.138
+}
