@@ -44,7 +44,7 @@ GET /burn?seconds=N    - грузим busy-loop'ом ядро CPU заданно
 
 И заодно проверяем работу `/eat` и потребление памяти через:
 ```bash
-watch -n1 'ps -p 3523 -o pid,rss,vsz,cmd'
+ps -p 3523 -o pid,rss,vsz,cmd
 ```
 
 <p>
