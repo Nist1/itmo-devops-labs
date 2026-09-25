@@ -1,0 +1,6 @@
+apiVersion: v2
+name: alert-webhook
+description: Echo-сервис — получатель webhook от Alertmanager; тело каждого запроса печатает в stdout
+type: application
+version: 0.1.0
+appVersion: "31"

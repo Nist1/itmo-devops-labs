@@ -1,0 +1,73 @@
+{{- if .Values.alerts.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "api.fullname" . }}-alerts
+  labels:
+    {{- include "api.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: api.rules
+      rules:
+        # 1. Пользователи получают ошибки
+        - alert: ApiHighErrorRate
+          expr: |
+            sum(rate(http_errors_total{namespace="{{ .Release.Namespace }}", service="{{ include "api.fullname" . }}"}[2m]))
+              /
+            sum(rate(http_requests_total{namespace="{{ .Release.Namespace }}", service="{{ include "api.fullname" . }}"}[2m]))
+              > {{ .Values.alerts.errorRateThreshold }}
+          for: 2m
+          labels:
+            severity: critical
+            service: api
+          annotations:
+            summary: "api: доля ошибок 5xx {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+            description: >-
+              Больше {{ mulf .Values.alerts.errorRateThreshold 100 }}% запросов к api заканчиваются 5xx
+              дольше 2 минут. Пользователи видят ошибки.
+            runbook: >-
+              1) Дашборд api RED: какой endpoint сыпет ошибками.
+              2) Loki: {namespace="app", app="api", level="ERROR"} — текст ошибки.
+              3) Open in Jaeger по trace_id — на каком спане упало.
+              4) Был ли недавно деплой? helm history api -n app → helm rollback.
+
+        # 2. Пользователи ждут слишком долго
+        - alert: ApiHighLatencyP95
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_request_duration_seconds_bucket{namespace="{{ .Release.Namespace }}", service="{{ include "api.fullname" . }}", endpoint!="/load"}[2m]))
+            ) > {{ .Values.alerts.latencyP95Seconds }}
+          for: 2m
+          labels:
+            severity: critical
+            service: api
+          annotations:
+            summary: "api: p95 времени ответа {{ "{{" }} $value | humanizeDuration {{ "}}" }}"
+            description: >-
+              95-й перцентиль времени ответа api выше {{ .Values.alerts.latencyP95Seconds }}s
+              дольше 2 минут. Каждый 20-й запрос медленнее порога.
+            runbook: >-
+              1) Дашборд: у какого endpoint вырос p95.
+              2) Jaeger: трейсы с Min Duration = порог — какой спан съедает время.
+              3) Насыщение: CPU/память пода (kubectl top pod -n app), троттлинг, соседи по ноде.
+              4) Если причина в нагрузке — масштабировать (replicas), если в зависимости — эскалировать владельцу.
+
+        # 3. Сервис не отвечает вовсе
+        - alert: ApiDown
+          expr: |
+            absent(up{namespace="{{ .Release.Namespace }}", service="{{ include "api.fullname" . }}"} == 1)
+          for: 1m
+          labels:
+            severity: critical
+            service: api
+          annotations:
+            summary: "api: нет ни одного живого экземпляра"
+            description: >-
+              Prometheus не может снять /metrics ни с одного пода api дольше минуты
+              (под упал, не проходит readiness или реплик 0). Сервис недоступен.
+            runbook: >-
+              1) kubectl -n app get pods,deploy,endpointslices -l app.kubernetes.io/name=api
+              2) kubectl -n app describe pod ... — Events: OOMKilled, CrashLoopBackOff, ImagePullBackOff, FailedScheduling.
+              3) kubectl -n app logs deploy/api --previous — почему упал.
+              4) Откатить последний релиз: helm rollback api -n app.
+{{- end }}

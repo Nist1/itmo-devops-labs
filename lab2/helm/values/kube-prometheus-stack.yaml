@@ -1,0 +1,93 @@
+# kube-prometheus-stack: Prometheus Operator + Prometheus + Alertmanager + Grafana
+# helm install kps prometheus-community/kube-prometheus-stack -n monitoring --create-namespace -f kube-prometheus-stack.yaml
+
+prometheus:
+  prometheusSpec:
+    # Подхватывать ServiceMonitor/PodMonitor/PrometheusRule из любых релизов,
+    # а не только с меткой release=kps (иначе ServiceMonitor чарта api молча игнорируется)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    # 4 точки в окне rate(...[1m])
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+
+    # Лаба: коротко храним, без PVC (emptyDir)
+    retention: 2d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 1536Mi
+
+alertmanager:
+  config:
+    route:
+      receiver: "null"              # по умолчанию — никуда
+      group_by: [alertname, service]
+      group_wait: 30s               # подождать соседей по группе перед первой отправкой
+      group_interval: 2m            # новые алерты в уже открытой группе — не чаще раза в 2 мин
+      repeat_interval: 1h           # напоминание, пока алерт горит
+      routes:
+        - receiver: "null"
+          matchers:
+            - alertname =~ "Watchdog|InfoInhibitor"
+        - receiver: webhook
+          matchers:
+            - severity = "critical"
+    receivers:
+      - name: "null"
+      - name: webhook
+        webhook_configs:
+          - url: http://alert-webhook.monitoring.svc:8080/alerts
+            send_resolved: true     # прислать и событие «починилось»
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+
+grafana:
+  adminPassword: admin
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 768Mi            # 384Mi не хватало — Grafana ловила OOMKilled
+  # Loki рядом с Prometheus — метрики и логи в одном окне
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      access: proxy
+      url: http://loki.monitoring.svc:3100
+      jsonData:
+        # trace_id из structured metadata строки лога → ссылка на трейс в Jaeger
+        derivedFields:
+          - name: trace_id
+            matcherType: label
+            matcherRegex: trace_id
+            datasourceUid: jaeger
+            url: "$${__value.raw}"
+            urlDisplayLabel: Open in Jaeger
+    - name: Jaeger
+      type: jaeger
+      uid: jaeger
+      access: proxy
+      url: http://jaeger.monitoring.svc:16686   # новый чарт: один Service "jaeger" на все порты
+
+# Компоненты control plane в minikube слушают только 127.0.0.1 внутри ноды —
+# скрейпить их нельзя, а вечно красные цели дают ложные TargetDown-алерты
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false

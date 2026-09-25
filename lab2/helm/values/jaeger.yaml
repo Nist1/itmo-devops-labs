@@ -1,0 +1,29 @@
+# jaegertracing/jaeger — all-in-one: collector + query + UI в одном поде, хранение в памяти
+# helm install jaeger jaegertracing/jaeger -n monitoring -f jaeger.yaml
+
+provisionDataStore:
+  cassandra: false               # по умолчанию чарт тащит Cassandra — не нужна
+  elasticsearch: false
+
+storage:
+  type: memory                   # трейсы в RAM: рестарт пода = трейсы потеряны (для лабы ок)
+
+allInOne:
+  enabled: true
+  extraEnv:
+    - name: MEMORY_MAX_TRACES    # ограничить память: храним последние N трейсов
+      value: "20000"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 768Mi
+
+# Раздельные компоненты распределённого режима — выключены
+agent:
+  enabled: false
+collector:
+  enabled: false
+query:
+  enabled: false

@@ -1,0 +1,21 @@
+# wiremind/karma — дашборд активных алертов поверх Alertmanager
+# helm repo add wiremind https://wiremind.github.io/wiremind-helm-charts
+# helm install karma wiremind/karma -n monitoring -f karma.yaml
+
+env:
+  # Karma сама ходит в API Alertmanager (pull) и показывает алерты / сайленсы
+  - name: ALERTMANAGER_URI
+    value: http://kps-kube-prometheus-stack-alertmanager.monitoring.svc:9093
+  # как подписать этот Alertmanager в UI (полезно, когда их несколько)
+  - name: ALERTMANAGER_NAME
+    value: lab2
+  # как часто перечитывать алерты
+  - name: ALERTMANAGER_INTERVAL
+    value: 15s
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
