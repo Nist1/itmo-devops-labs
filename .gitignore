@@ -1,0 +1,9 @@
+# Скомпилированные бинарники (Go и C)
+**/api/api
+**/api/seccomp-wrap
+*.exe
+*.out
+
+# Резервные копии от редакторов (nano/etc)
+*.go.save
+*.save
