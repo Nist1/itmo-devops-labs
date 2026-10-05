@@ -1,0 +1,21 @@
+# Нарушает ТОЛЬКО правило 4 (disallow-privileged-containers): privileged: true.
+# allowPrivilegeEscalation здесь намеренно НЕ задан: privileged: true вместе с
+# allowPrivilegeEscalation: false отклонит валидация Pod в самом apiserver
+# (до webhook) — до Kyverno запрос бы не дошёл.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: violation-privileged
+  namespace: shop
+  labels:
+    app.kubernetes.io/name: violation-privileged
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: api
+      image: registry.local/shop/api:0.1.0
+      securityContext:
+        privileged: true
+      resources:
+        requests: {cpu: 50m, memory: 32Mi}
+        limits: {memory: 128Mi}

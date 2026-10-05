@@ -1,3 +1,5 @@
+# Нарушает ТОЛЬКО правило 1 (require-resources-limits): нет блока resources.
+# Остальное как в 00-compliant: доверенный реестр, явный тег, обе метки, без privileged.
 apiVersion: v1
 kind: Pod
 metadata:
@@ -15,4 +17,4 @@ spec:
         - containerPort: 8080
       securityContext:
         allowPrivilegeEscalation: false
-
+      # resources: — намеренно отсутствует

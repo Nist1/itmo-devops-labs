@@ -1,11 +1,12 @@
 apiVersion: policies.kyverno.io/v1
 kind: ValidatingPolicy
 metadata:
-  name: require-resource-limits
+  name: restrict-image-registries
   annotations:
     policies.kyverno.io/description: >-
-      Каждый контейнер (включая initContainers) обязан объявить requests.cpu,
-      requests.memory и limits.memory. Лимит CPU сознательно не требуется.
+      Образы разрешены только из доверенных реестров: registry.local/shop/
+      (сервисы shop) и ghcr.io/cloudnative-pg/ (postgres через оператор).
+      Проверяются containers и initContainers.
 spec:
   validationActions: [Deny]
   matchConstraints:
@@ -19,8 +20,6 @@ spec:
         - key: kubernetes.io/metadata.name
           operator: NotIn
           values: [kube-system, kube-public, kube-node-lease, kyverno, monitoring, local-path-storage, cnpg-system]
-  # Правило на Pod растягивается на контроллеры: отказ приходит на сам
-  # Deployment/StatefulSet/Job (т.е. на helm install), а не на ReplicaSet.
   autogen:
     podControllers:
       controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
@@ -29,15 +28,14 @@ spec:
       expression: >-
         object.spec.containers +
         (has(object.spec.initContainers) ? object.spec.initContainers : [])
+    # Префикс с хостом: имя без хоста (nginx) — это docker.io/library/nginx,
+    # и startsWith по такому префиксу его не пропустит.
+    - name: trusted
+      expression: "['registry.local/shop/', 'ghcr.io/cloudnative-pg/']"
   validations:
     - expression: >-
         variables.containers.all(c,
-          has(c.resources) &&
-          has(c.resources.requests) &&
-          has(c.resources.requests.cpu) &&
-          has(c.resources.requests.memory) &&
-          has(c.resources.limits) &&
-          has(c.resources.limits.memory))
+          variables.trusted.exists(p, c.image.startsWith(p)))
       message: >-
-        Каждый контейнер (и initContainer) должен задать resources.requests.cpu,
-        resources.requests.memory и resources.limits.memory.
+        Образ не из доверенного реестра. Разрешены: registry.local/shop/*
+        и ghcr.io/cloudnative-pg/*.
