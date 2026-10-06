@@ -1,0 +1,39 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/description: >-
+      Образ обязан иметь явный тег или digest, тег не может быть latest.
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, kyverno, monitoring, local-path-storage, cnpg-system]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : [])
+  validations:
+    # 1) есть digest (@sha256:...) — образ неизменяем, тег не нужен;
+    # 2) иначе двоеточие ищем только в ПОСЛЕДНЕМ сегменте пути: в
+    #    registry.local:5000/app двоеточие — это порт реестра, а не тег;
+    # 3) и тег при этом не latest.
+    - expression: >-
+        variables.containers.all(c,
+          c.image.contains('@') ||
+          (c.image.split('/')[size(c.image.split('/')) - 1].contains(':') &&
+           !c.image.endsWith(':latest')))
+      message: "У образа должен быть явный тег или digest, тег latest запрещён."

@@ -1,0 +1,20 @@
+# Нарушает ТОЛЬКО правило 1 (require-resources-limits): нет блока resources.
+# Остальное как в 00-compliant: доверенный реестр, явный тег, обе метки, без privileged.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: violation-no-limits
+  namespace: shop
+  labels:
+    app.kubernetes.io/name: violation-no-limits
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: api
+      image: registry.local/shop/api:0.1.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+      securityContext:
+        allowPrivilegeEscalation: false
+      # resources: — намеренно отсутствует

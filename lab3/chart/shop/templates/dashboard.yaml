@@ -1,0 +1,13 @@
+{{- if .Values.monitoring.enabled }}
+{{- $ctx := dict "root" . "component" "monitoring" "tag" .Chart.AppVersion }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "shop.fullname" . }}-dashboard
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  shop.json: |-
+{{ .Files.Get "dashboards/shop.json" | indent 4 }}
+{{- end }}

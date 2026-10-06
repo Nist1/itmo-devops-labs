@@ -1,0 +1,73 @@
+{{- if .Values.monitoring.enabled }}
+{{- $ctx := dict "root" . "component" "monitoring" "tag" .Chart.AppVersion }}
+{{- $ns := .Release.Namespace }}
+{{- $api := printf "%s-api" (include "shop.fullname" .) }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "shop.fullname" . }}-alerts
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  groups:
+    - name: shop.rules
+      rules:
+        # 1. Симптом: пользователи получают 5xx. Доля, а не количество: 10 ошибок/с
+        #    при 10k RPS — шум, при 20 RPS — авария. Пробы (/health) не считаем.
+        - alert: ShopApiHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{namespace="{{ $ns }}", service="{{ $api }}", handler!="health", code=~"5.."}[2m]))
+              /
+            sum(rate(http_requests_total{namespace="{{ $ns }}", service="{{ $api }}", handler!="health"}[2m]))
+              > {{ .Values.monitoring.alerts.errorRateThreshold }}
+          for: 2m
+          labels:
+            severity: critical
+            service: shop
+          annotations:
+            summary: "shop-api: доля ответов 5xx {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+            description: >-
+              Больше {{ mulf .Values.monitoring.alerts.errorRateThreshold 100 }}% запросов к api
+              (кроме /health) заканчиваются 5xx дольше 2 минут.
+            runbook: >-
+              1) Какой handler сыпет ошибки: sum by (handler, code) (rate(http_requests_total[2m])).
+              2) Если 503 на /order и /orders — смотри алерт ShopDatabaseUnavailable.
+              3) Был ли недавно выкат? helm history shop -n shop, при необходимости helm rollback.
+
+        # 2. Причина: api не видит базу. api_db_ready выставляется фоновой проверкой каждые 5 с;
+        #    max == 0 значит, что НИ ОДНА реплика не достучалась до postgres.
+        - alert: ShopDatabaseUnavailable
+          expr: max(api_db_ready{namespace="{{ $ns }}", service="{{ $api }}"}) == 0
+          for: 1m
+          labels:
+            severity: critical
+            service: shop
+          annotations:
+            summary: "shop-api: ни одна реплика не видит postgres"
+            description: >-
+              Все реплики api отчитываются api_db_ready=0 дольше минуты: заказы
+              не создаются и не читаются (503 на /order и /orders).
+            runbook: >-
+              1) kubectl -n shop get cluster,pods -l cnpg.io/cluster={{ .Values.database.clusterName }}
+              2) kubectl -n shop describe cluster {{ .Values.database.clusterName }} — status.phase и Events.
+              3) Жив ли оператор: kubectl -n cnpg-system get pods. Без оператора под БД никто не вернёт.
+
+        # 3. Тихая поломка: worker жив (/health ok), но заказы не обрабатываются.
+        #    Пользователь это не увидит, поэтому нужен отдельный алерт. Если worker
+        #    ни разу не отработал, метрика равна 0 и алерт тоже сработает.
+        - alert: ShopWorkerStalled
+          expr: time() - max(worker_last_success_timestamp_seconds{namespace="{{ $ns }}"}) > {{ .Values.monitoring.alerts.workerStalledSeconds }}
+          for: 1m
+          labels:
+            severity: critical
+            service: shop
+          annotations:
+            summary: "shop-worker: нет успешного опроса БД {{ "{{" }} $value | humanizeDuration {{ "}}" }}"
+            description: >-
+              Ни один worker не завершил опрос БД за последние
+              {{ .Values.monitoring.alerts.workerStalledSeconds }} с: новые заказы остаются в статусе new.
+            runbook: >-
+              1) kubectl -n shop logs -l app.kubernetes.io/name=worker --prefix --tail=20 — ошибки poll failed.
+              2) Если в логах ошибки соединения — см. ShopDatabaseUnavailable.
+              3) Backlog в метрике worker_orders_backlog.
+{{- end }}

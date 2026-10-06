@@ -1,0 +1,41 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/description: >-
+      Образы разрешены только из доверенных реестров: registry.local/shop/
+      (сервисы shop) и ghcr.io/cloudnative-pg/ (postgres через оператор).
+      Проверяются containers и initContainers.
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, kyverno, monitoring, local-path-storage, cnpg-system]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : [])
+    # Префикс с хостом: имя без хоста (nginx) — это docker.io/library/nginx,
+    # и startsWith по такому префиксу его не пропустит.
+    - name: trusted
+      expression: "['registry.local/shop/', 'ghcr.io/cloudnative-pg/']"
+  validations:
+    - expression: >-
+        variables.containers.all(c,
+          variables.trusted.exists(p, c.image.startsWith(p)))
+      message: >-
+        Образ не из доверенного реестра. Разрешены: registry.local/shop/*
+        и ghcr.io/cloudnative-pg/*.
