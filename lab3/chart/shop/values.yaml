@@ -71,3 +71,11 @@ rollout:
   # и kube-proxy на нодах, и новые запросы перестают на него приходить
   preStopSleepSeconds: 5
   terminationGracePeriodSeconds: 30
+
+monitoring:
+  enabled: true
+  interval: 15s
+  alerts:
+    errorRateThreshold: 0.05
+    workerStalledSeconds: 60
+
