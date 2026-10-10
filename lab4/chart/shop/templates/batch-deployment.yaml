@@ -1,0 +1,58 @@
+{{- $ctx := dict "root" . "component" "batch" "tag" .Values.batch.tag }}
+# Подопытная фоновая нагрузка ("ночная аналитика"): жжёт CPU и держит память.
+# Гвардрейлы Лабы 3 действуют без исключений: requests и limits.memory обязательны.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shop.fullname" . }}-batch
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.batch.replicas }}
+  selector:
+    matchLabels:
+      {{- include "shop.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shop.labels" $ctx | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: batch
+          image: "{{ .Values.image.registry }}/{{ .Values.batch.image }}:{{ .Values.batch.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PORT
+              value: {{ .Values.batch.port | quote }}
+            - name: CPU_WORKERS
+              value: {{ .Values.batch.cpuWorkers | quote }}
+            - name: CPU_DUTY
+              value: {{ .Values.batch.cpuDuty | quote }}
+            - name: MEM_TARGET_MB
+              value: {{ .Values.batch.memTargetMB | quote }}
+            - name: MEM_STEP_MB
+              value: {{ .Values.batch.memStepMB | quote }}
+            - name: MEM_STEP_INTERVAL
+              value: {{ .Values.batch.memStepInterval | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.batch.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.batch.resources | nindent 12 }}

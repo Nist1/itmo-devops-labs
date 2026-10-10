@@ -1,0 +1,299 @@
+{
+  "uid": "shop-sla-lab4",
+  "title": "shop: SLA под перегрузкой",
+  "tags": ["shop", "lab4"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "graphTooltip": 1,
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "${ds}" },
+        "enable": true,
+        "iconColor": "red",
+        "name": "Алерты shop (firing)",
+        "expr": "ALERTS{alertname=~\"Shop.*\", alertstate=\"firing\"}",
+        "titleFormat": "{{alertname}}",
+        "step": "15s"
+      },
+      {
+        "datasource": { "type": "prometheus", "uid": "${ds}" },
+        "enable": true,
+        "iconColor": "orange",
+        "name": "Evicted / OOMKilled",
+        "expr": "(kube_pod_status_reason{reason=\"Evicted\", namespace=~\"$ns\"} == 1) or (kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\", namespace=~\"$ns\"} == 1)",
+        "titleFormat": "{{reason}}: {{pod}}",
+        "step": "15s"
+      }
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "ds",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "ns",
+        "label": "namespace",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${ds}" },
+        "query": { "query": "label_values(kube_pod_info, namespace)", "refId": "ns" },
+        "definition": "label_values(kube_pod_info, namespace)",
+        "refresh": 2,
+        "current": { "text": "shop", "value": "shop" },
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "row", "title": "SLA критического пути: заказ api → postgres (Часть 8)",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "collapsed": false, "panels": []
+    },
+    {
+      "id": 2, "type": "stat", "title": "p95 api (SLA ≤ 300 мс)",
+      "description": "95-й перцентиль времени ответа api без /health. Зелёный, пока держим SLA.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" }],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.3 }] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Доля 5xx",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "(sum(rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\", code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval]))" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.01 }, { "color": "red", "value": 0.05 }] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4, "type": "stat", "title": "Запросов/с (без /health)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "sum(rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval]))" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 1 }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5, "type": "stat", "title": "Нод с репликами api",
+      "description": "Сколько разных нод занимают поды api. 1 = разнесение не работает.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "count(count by (node) (kube_pod_info{namespace=~\"$ns\", pod=~\"shop-api-.*\"}))" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 2 }] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "api: задержка p50 / p95 / p99 (красная линия = SLA)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
+      "targets": [
+        { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" },
+        { "refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" },
+        { "refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 8, "thresholdsStyle": { "mode": "line" } }, "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 0.3 }] } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "api: запросы/с по handler и коды ответа",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "legendFormat": "{{handler}} {{code}}", "expr": "sum by (handler, code) (rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval]))" }],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [{ "matcher": { "id": "byRegexp", "options": ".* 5.."}, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+
+    {
+      "id": 10, "type": "row", "title": "Размещение и планирование (Части 4, 6)",
+      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 }, "collapsed": false, "panels": []
+    },
+    {
+      "id": 11, "type": "table", "title": "Где какой под (pod → node)",
+      "description": "Доказательство разнесения: реплики api должны стоять на разных нодах.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 14, "w": 8, "h": 9 },
+      "targets": [{ "refId": "A", "format": "table", "instant": true, "expr": "kube_pod_info{namespace=~\"$ns\"}" }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "endpoint": true, "service": true, "container": true, "namespace": true, "host_ip": true, "pod_ip": true, "uid": true, "created_by_kind": true, "host_network": true, "priority_class": true }, "indexByName": { "node": 0, "pod": 1, "created_by_name": 2 } } },
+        { "id": "sortBy", "options": { "sort": [{ "field": "node" }, { "field": "pod" }] } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 12, "type": "timeseries", "title": "Поды в namespace по фазам (Pending = не влезли)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 8, "y": 14, "w": 8, "h": 9 },
+      "targets": [{ "refId": "A", "legendFormat": "{{phase}}", "expr": "sum by (phase) (kube_pod_status_phase{namespace=~\"$ns\"})" }],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "custom": { "lineWidth": 2, "fillOpacity": 15, "stacking": { "mode": "normal" } } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "Pending" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+        { "matcher": { "id": "byName", "options": "Running" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+        { "matcher": { "id": "byName", "options": "Failed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 13, "type": "timeseries", "title": "Requests / allocatable по нодам (по чему считает планировщик)",
+      "description": "Планировщик смотрит на requests, а не на фактическое потребление. 100% = больше ничего не влезет.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 9 },
+      "targets": [
+        { "refId": "A", "legendFormat": "CPU {{node}}", "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"cpu\"}) / sum by (node) (kube_node_status_allocatable{resource=\"cpu\"})" },
+        { "refId": "B", "legendFormat": "RAM {{node}}", "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"memory\"}) / sum by (node) (kube_node_status_allocatable{resource=\"memory\"})" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1.1, "custom": { "lineWidth": 2, "fillOpacity": 5, "thresholdsStyle": { "mode": "line" } }, "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+
+    {
+      "id": 20, "type": "row", "title": "Давление и вытеснение (Часть 7)",
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 }, "collapsed": false, "panels": []
+    },
+    {
+      "id": 21, "type": "timeseries", "title": "Память подов: working set (сплошная) и limit (пунктир)",
+      "description": "OOMKilled = под упёрся в СВОЙ limit. Eviction = нехватка памяти на ноде, лимит пода при этом не достигнут.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 9 },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{pod}}", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=~\"$ns\", container!=\"\", container!=\"POD\"})" },
+        { "refId": "B", "legendFormat": "limit {{pod}}", "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=~\"$ns\", resource=\"memory\"})" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 2, "fillOpacity": 0 } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "^limit .*" }, "properties": [{ "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 8] } }, { "id": "custom.lineWidth", "value": 1 }] }
+      ] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 22, "type": "timeseries", "title": "Память нод: доступно",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 12, "y": 24, "w": 6, "h": 9 },
+      "targets": [
+        { "refId": "A", "legendFormat": "available {{instance}}", "expr": "node_memory_MemAvailable_bytes" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "custom": { "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 23, "type": "stat", "title": "Evicted (подов)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 18, "y": 24, "w": 3, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "count(kube_pod_status_reason{reason=\"Evicted\", namespace=~\"$ns\"} == 1) or vector(0)" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 24, "type": "stat", "title": "OOMKilled (контейнеров)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 21, "y": 24, "w": 3, "h": 4 },
+      "targets": [{ "refId": "A", "expr": "count(kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\", namespace=~\"$ns\"} == 1) or vector(0)" }],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 25, "type": "table", "title": "QoS-класс подов (порядок жертв: BestEffort → Burstable → Guaranteed)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 18, "y": 28, "w": 6, "h": 5 },
+      "targets": [{ "refId": "A", "format": "table", "instant": true, "expr": "kube_pod_status_qos_class{namespace=~\"$ns\"} == 1" }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "endpoint": true, "service": true, "container": true, "namespace": true, "uid": true }, "indexByName": { "qos_class": 0, "pod": 1 } } },
+        { "id": "sortBy", "options": { "sort": [{ "field": "qos_class" }, { "field": "pod" }] } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+
+    {
+      "id": 30, "type": "row", "title": "Ресурсы и гарантии (Части 3, 5)",
+      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 }, "collapsed": false, "panels": []
+    },
+    {
+      "id": 31, "type": "timeseries", "title": "CPU: факт (сплошная) vs request (пунктир) по контейнерам",
+      "description": "Факт выше request — контейнер живёт за счёт чужого простоя и первым проиграет при борьбе за CPU.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 35, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{container}}", "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=~\"$ns\", container!=\"\", container!=\"POD\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "request {{container}}", "expr": "sum by (container) (kube_pod_container_resource_requests{namespace=~\"$ns\", resource=\"cpu\"})" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 2, "custom": { "lineWidth": 2, "fillOpacity": 0 } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "^request .*" }, "properties": [{ "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 8] } }, { "id": "custom.lineWidth", "value": 1 }] }
+      ] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 32, "type": "timeseries", "title": "CPU throttling: доля периодов с троттлингом",
+      "description": "Троттлинг появляется только у контейнеров с CPU limit. Без CPU limit давление проявляется как нехватка CPU shares, а не троттлинг.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 8, "y": 35, "w": 8, "h": 8 },
+      "targets": [{ "refId": "A", "legendFormat": "{{container}}", "expr": "sum by (container) (rate(container_cpu_cfs_throttled_periods_total{namespace=~\"$ns\", container!=\"\"}[$__rate_interval])) / sum by (container) (rate(container_cpu_cfs_periods_total{namespace=~\"$ns\", container!=\"\"}[$__rate_interval]))" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 33, "type": "timeseries", "title": "batch: пропускная способность (деградирует первым) и реплики",
+      "description": "batch_cpu_iterations_total — итерации цикла жжения CPU в секунду. Падает при борьбе за CPU: деградирует batch, а не api.",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 16, "y": 35, "w": 8, "h": 8 },
+      "targets": [
+        { "refId": "A", "legendFormat": "итераций/с (сумма)", "expr": "sum(rate(batch_cpu_iterations_total{namespace=~\"$ns\"}[$__rate_interval]))" },
+        { "refId": "B", "legendFormat": "реплик Running", "expr": "sum(kube_pod_status_phase{namespace=~\"$ns\", pod=~\"shop-batch-.*\", phase=\"Running\"})" },
+        { "refId": "C", "legendFormat": "реплик Pending", "expr": "sum(kube_pod_status_phase{namespace=~\"$ns\", pod=~\"shop-batch-.*\", phase=\"Pending\"})" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 5 } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "реплик.*" }, "properties": [{ "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.drawStyle", "value": "bars" }, { "id": "custom.fillOpacity", "value": 30 }, { "id": "decimals", "value": 0 }] }
+      ] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 34, "type": "timeseries", "title": "PodDisruptionBudget: допустимо потерять подов",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 0, "y": 43, "w": 8, "h": 7 },
+      "targets": [
+        { "refId": "A", "legendFormat": "{{poddisruptionbudget}} disruptions allowed", "expr": "kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=~\"$ns\"}" },
+        { "refId": "B", "legendFormat": "{{poddisruptionbudget}} healthy", "expr": "kube_poddisruptionbudget_status_current_healthy{namespace=~\"$ns\"}" }
+      ],
+      "fieldConfig": { "defaults": { "decimals": 0, "custom": { "lineWidth": 2, "fillOpacity": 5 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 35, "type": "timeseries", "title": "Рестарты контейнеров (OOM / liveness)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 8, "y": 43, "w": 8, "h": 7 },
+      "targets": [{ "refId": "A", "legendFormat": "{{pod}}", "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=~\"$ns\"}[5m]))" }],
+      "fieldConfig": { "defaults": { "decimals": 0, "custom": { "lineWidth": 2, "fillOpacity": 5 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 36, "type": "table", "title": "Алерты (firing)",
+      "datasource": { "type": "prometheus", "uid": "${ds}" },
+      "gridPos": { "x": 16, "y": 43, "w": 8, "h": 7 },
+      "targets": [{ "refId": "A", "format": "table", "instant": true, "expr": "ALERTS{alertstate=\"firing\", namespace=~\"$ns\"}" }],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true, "namespace": true }, "indexByName": { "alertname": 0, "severity": 1 } } }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    }
+  ]
+}
