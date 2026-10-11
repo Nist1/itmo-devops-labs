@@ -1,299 +1,2099 @@
 {
-  "uid": "shop-sla-lab4",
-  "title": "shop: SLA под перегрузкой",
-  "tags": ["shop", "lab4"],
-  "timezone": "browser",
-  "schemaVersion": 39,
-  "version": 1,
-  "editable": true,
-  "refresh": "10s",
-  "time": { "from": "now-30m", "to": "now" },
-  "graphTooltip": 1,
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      },
-      {
-        "datasource": { "type": "prometheus", "uid": "${ds}" },
-        "enable": true,
-        "iconColor": "red",
-        "name": "Алерты shop (firing)",
-        "expr": "ALERTS{alertname=~\"Shop.*\", alertstate=\"firing\"}",
-        "titleFormat": "{{alertname}}",
-        "step": "15s"
-      },
-      {
-        "datasource": { "type": "prometheus", "uid": "${ds}" },
-        "enable": true,
-        "iconColor": "orange",
-        "name": "Evicted / OOMKilled",
-        "expr": "(kube_pod_status_reason{reason=\"Evicted\", namespace=~\"$ns\"} == 1) or (kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\", namespace=~\"$ns\"} == 1)",
-        "titleFormat": "{{reason}}: {{pod}}",
-        "step": "15s"
-      }
-    ]
-  },
-  "templating": {
-    "list": [
-      {
-        "name": "ds",
-        "label": "Prometheus",
-        "type": "datasource",
-        "query": "prometheus",
-        "current": {},
-        "hide": 0
-      },
-      {
-        "name": "ns",
-        "label": "namespace",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${ds}" },
-        "query": { "query": "label_values(kube_pod_info, namespace)", "refId": "ns" },
-        "definition": "label_values(kube_pod_info, namespace)",
-        "refresh": 2,
-        "current": { "text": "shop", "value": "shop" },
-        "includeAll": false,
-        "multi": false
-      }
-    ]
-  },
-  "panels": [
-    {
-      "id": 1, "type": "row", "title": "SLA критического пути: заказ api → postgres (Часть 8)",
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "collapsed": false, "panels": []
+  "apiVersion": "dashboard.grafana.app/v2",
+  "kind": "Dashboard",
+  "metadata": {
+    "name": "shop-sla-lab4",
+    "namespace": "default",
+    "uid": "aab76758-1509-469d-8f52-ba24e5f23840",
+    "resourceVersion": "1791728546948008",
+    "generation": 3,
+    "creationTimestamp": "2026-10-11T12:42:51Z",
+    "labels": {
+      "grafana.app/deprecatedInternalID": "1579117611683840"
     },
-    {
-      "id": 2, "type": "stat", "title": "p95 api (SLA ≤ 300 мс)",
-      "description": "95-й перцентиль времени ответа api без /health. Зелёный, пока держим SLA.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 4 },
-      "targets": [{ "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" }],
-      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 0.3 }] } }, "overrides": [] },
-      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
-    },
-    {
-      "id": 3, "type": "stat", "title": "Доля 5xx",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 4 },
-      "targets": [{ "refId": "A", "expr": "(sum(rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\", code=~\"5..\"}[$__rate_interval])) or vector(0)) / sum(rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval]))" }],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.01 }, { "color": "red", "value": 0.05 }] } }, "overrides": [] },
-      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
-    },
-    {
-      "id": 4, "type": "stat", "title": "Запросов/с (без /health)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 4 },
-      "targets": [{ "refId": "A", "expr": "sum(rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval]))" }],
-      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 1 }, "overrides": [] },
-      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
-    },
-    {
-      "id": 5, "type": "stat", "title": "Нод с репликами api",
-      "description": "Сколько разных нод занимают поды api. 1 = разнесение не работает.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 4 },
-      "targets": [{ "refId": "A", "expr": "count(count by (node) (kube_pod_info{namespace=~\"$ns\", pod=~\"shop-api-.*\"}))" }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 2 }] } }, "overrides": [] },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
-    },
-    {
-      "id": 6, "type": "timeseries", "title": "api: задержка p50 / p95 / p99 (красная линия = SLA)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 0, "y": 5, "w": 12, "h": 8 },
-      "targets": [
-        { "refId": "A", "legendFormat": "p50", "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" },
-        { "refId": "B", "legendFormat": "p95", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" },
-        { "refId": "C", "legendFormat": "p99", "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 8, "thresholdsStyle": { "mode": "line" } }, "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 0.3 }] } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 7, "type": "timeseries", "title": "api: запросы/с по handler и коды ответа",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 12, "y": 5, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "legendFormat": "{{handler}} {{code}}", "expr": "sum by (handler, code) (rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval]))" }],
-      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [{ "matcher": { "id": "byRegexp", "options": ".* 5.."}, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-
-    {
-      "id": 10, "type": "row", "title": "Размещение и планирование (Части 4, 6)",
-      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 1 }, "collapsed": false, "panels": []
-    },
-    {
-      "id": 11, "type": "table", "title": "Где какой под (pod → node)",
-      "description": "Доказательство разнесения: реплики api должны стоять на разных нодах.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 0, "y": 14, "w": 8, "h": 9 },
-      "targets": [{ "refId": "A", "format": "table", "instant": true, "expr": "kube_pod_info{namespace=~\"$ns\"}" }],
-      "transformations": [
-        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "endpoint": true, "service": true, "container": true, "namespace": true, "host_ip": true, "pod_ip": true, "uid": true, "created_by_kind": true, "host_network": true, "priority_class": true }, "indexByName": { "node": 0, "pod": 1, "created_by_name": 2 } } },
-        { "id": "sortBy", "options": { "sort": [{ "field": "node" }, { "field": "pod" }] } }
-      ],
-      "fieldConfig": { "defaults": {}, "overrides": [] },
-      "options": { "showHeader": true }
-    },
-    {
-      "id": 12, "type": "timeseries", "title": "Поды в namespace по фазам (Pending = не влезли)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 8, "y": 14, "w": 8, "h": 9 },
-      "targets": [{ "refId": "A", "legendFormat": "{{phase}}", "expr": "sum by (phase) (kube_pod_status_phase{namespace=~\"$ns\"})" }],
-      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "custom": { "lineWidth": 2, "fillOpacity": 15, "stacking": { "mode": "normal" } } }, "overrides": [
-        { "matcher": { "id": "byName", "options": "Pending" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
-        { "matcher": { "id": "byName", "options": "Running" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
-        { "matcher": { "id": "byName", "options": "Failed" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
-      ] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 13, "type": "timeseries", "title": "Requests / allocatable по нодам (по чему считает планировщик)",
-      "description": "Планировщик смотрит на requests, а не на фактическое потребление. 100% = больше ничего не влезет.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 9 },
-      "targets": [
-        { "refId": "A", "legendFormat": "CPU {{node}}", "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"cpu\"}) / sum by (node) (kube_node_status_allocatable{resource=\"cpu\"})" },
-        { "refId": "B", "legendFormat": "RAM {{node}}", "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"memory\"}) / sum by (node) (kube_node_status_allocatable{resource=\"memory\"})" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1.1, "custom": { "lineWidth": 2, "fillOpacity": 5, "thresholdsStyle": { "mode": "line" } }, "thresholds": { "mode": "absolute", "steps": [{ "color": "transparent", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-
-    {
-      "id": 20, "type": "row", "title": "Давление и вытеснение (Часть 7)",
-      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 }, "collapsed": false, "panels": []
-    },
-    {
-      "id": 21, "type": "timeseries", "title": "Память подов: working set (сплошная) и limit (пунктир)",
-      "description": "OOMKilled = под упёрся в СВОЙ limit. Eviction = нехватка памяти на ноде, лимит пода при этом не достигнут.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 9 },
-      "targets": [
-        { "refId": "A", "legendFormat": "{{pod}}", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=~\"$ns\", container!=\"\", container!=\"POD\"})" },
-        { "refId": "B", "legendFormat": "limit {{pod}}", "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=~\"$ns\", resource=\"memory\"})" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 2, "fillOpacity": 0 } }, "overrides": [
-        { "matcher": { "id": "byRegexp", "options": "^limit .*" }, "properties": [{ "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 8] } }, { "id": "custom.lineWidth", "value": 1 }] }
-      ] },
-      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 22, "type": "timeseries", "title": "Память нод: доступно",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 12, "y": 24, "w": 6, "h": 9 },
-      "targets": [
-        { "refId": "A", "legendFormat": "available {{instance}}", "expr": "node_memory_MemAvailable_bytes" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "custom": { "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 23, "type": "stat", "title": "Evicted (подов)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 18, "y": 24, "w": 3, "h": 4 },
-      "targets": [{ "refId": "A", "expr": "count(kube_pod_status_reason{reason=\"Evicted\", namespace=~\"$ns\"} == 1) or vector(0)" }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } }, "overrides": [] },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
-    },
-    {
-      "id": 24, "type": "stat", "title": "OOMKilled (контейнеров)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 21, "y": 24, "w": 3, "h": 4 },
-      "targets": [{ "refId": "A", "expr": "count(kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\", namespace=~\"$ns\"} == 1) or vector(0)" }],
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
-    },
-    {
-      "id": 25, "type": "table", "title": "QoS-класс подов (порядок жертв: BestEffort → Burstable → Guaranteed)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 18, "y": 28, "w": 6, "h": 5 },
-      "targets": [{ "refId": "A", "format": "table", "instant": true, "expr": "kube_pod_status_qos_class{namespace=~\"$ns\"} == 1" }],
-      "transformations": [
-        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "endpoint": true, "service": true, "container": true, "namespace": true, "uid": true }, "indexByName": { "qos_class": 0, "pod": 1 } } },
-        { "id": "sortBy", "options": { "sort": [{ "field": "qos_class" }, { "field": "pod" }] } }
-      ],
-      "fieldConfig": { "defaults": {}, "overrides": [] },
-      "options": { "showHeader": true }
-    },
-
-    {
-      "id": 30, "type": "row", "title": "Ресурсы и гарантии (Части 3, 5)",
-      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 }, "collapsed": false, "panels": []
-    },
-    {
-      "id": 31, "type": "timeseries", "title": "CPU: факт (сплошная) vs request (пунктир) по контейнерам",
-      "description": "Факт выше request — контейнер живёт за счёт чужого простоя и первым проиграет при борьбе за CPU.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 0, "y": 35, "w": 8, "h": 8 },
-      "targets": [
-        { "refId": "A", "legendFormat": "{{container}}", "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=~\"$ns\", container!=\"\", container!=\"POD\"}[$__rate_interval]))" },
-        { "refId": "B", "legendFormat": "request {{container}}", "expr": "sum by (container) (kube_pod_container_resource_requests{namespace=~\"$ns\", resource=\"cpu\"})" }
-      ],
-      "fieldConfig": { "defaults": { "unit": "none", "decimals": 2, "custom": { "lineWidth": 2, "fillOpacity": 0 } }, "overrides": [
-        { "matcher": { "id": "byRegexp", "options": "^request .*" }, "properties": [{ "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 8] } }, { "id": "custom.lineWidth", "value": 1 }] }
-      ] },
-      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 32, "type": "timeseries", "title": "CPU throttling: доля периодов с троттлингом",
-      "description": "Троттлинг появляется только у контейнеров с CPU limit. Без CPU limit давление проявляется как нехватка CPU shares, а не троттлинг.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 8, "y": 35, "w": 8, "h": 8 },
-      "targets": [{ "refId": "A", "legendFormat": "{{container}}", "expr": "sum by (container) (rate(container_cpu_cfs_throttled_periods_total{namespace=~\"$ns\", container!=\"\"}[$__rate_interval])) / sum by (container) (rate(container_cpu_cfs_periods_total{namespace=~\"$ns\", container!=\"\"}[$__rate_interval]))" }],
-      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "lineWidth": 2, "fillOpacity": 8 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 33, "type": "timeseries", "title": "batch: пропускная способность (деградирует первым) и реплики",
-      "description": "batch_cpu_iterations_total — итерации цикла жжения CPU в секунду. Падает при борьбе за CPU: деградирует batch, а не api.",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 16, "y": 35, "w": 8, "h": 8 },
-      "targets": [
-        { "refId": "A", "legendFormat": "итераций/с (сумма)", "expr": "sum(rate(batch_cpu_iterations_total{namespace=~\"$ns\"}[$__rate_interval]))" },
-        { "refId": "B", "legendFormat": "реплик Running", "expr": "sum(kube_pod_status_phase{namespace=~\"$ns\", pod=~\"shop-batch-.*\", phase=\"Running\"})" },
-        { "refId": "C", "legendFormat": "реплик Pending", "expr": "sum(kube_pod_status_phase{namespace=~\"$ns\", pod=~\"shop-batch-.*\", phase=\"Pending\"})" }
-      ],
-      "fieldConfig": { "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 5 } }, "overrides": [
-        { "matcher": { "id": "byRegexp", "options": "реплик.*" }, "properties": [{ "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.drawStyle", "value": "bars" }, { "id": "custom.fillOpacity", "value": 30 }, { "id": "decimals", "value": 0 }] }
-      ] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 34, "type": "timeseries", "title": "PodDisruptionBudget: допустимо потерять подов",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 0, "y": 43, "w": 8, "h": 7 },
-      "targets": [
-        { "refId": "A", "legendFormat": "{{poddisruptionbudget}} disruptions allowed", "expr": "kube_poddisruptionbudget_status_pod_disruptions_allowed{namespace=~\"$ns\"}" },
-        { "refId": "B", "legendFormat": "{{poddisruptionbudget}} healthy", "expr": "kube_poddisruptionbudget_status_current_healthy{namespace=~\"$ns\"}" }
-      ],
-      "fieldConfig": { "defaults": { "decimals": 0, "custom": { "lineWidth": 2, "fillOpacity": 5 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 35, "type": "timeseries", "title": "Рестарты контейнеров (OOM / liveness)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 8, "y": 43, "w": 8, "h": 7 },
-      "targets": [{ "refId": "A", "legendFormat": "{{pod}}", "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=~\"$ns\"}[5m]))" }],
-      "fieldConfig": { "defaults": { "decimals": 0, "custom": { "lineWidth": 2, "fillOpacity": 5 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
-    },
-    {
-      "id": 36, "type": "table", "title": "Алерты (firing)",
-      "datasource": { "type": "prometheus", "uid": "${ds}" },
-      "gridPos": { "x": 16, "y": 43, "w": 8, "h": 7 },
-      "targets": [{ "refId": "A", "format": "table", "instant": true, "expr": "ALERTS{alertstate=\"firing\", namespace=~\"$ns\"}" }],
-      "transformations": [
-        { "id": "organize", "options": { "excludeByName": { "Time": true, "Value": true, "__name__": true, "alertstate": true, "namespace": true }, "indexByName": { "alertname": 0, "severity": 1 } } }
-      ],
-      "fieldConfig": { "defaults": {}, "overrides": [] },
-      "options": { "showHeader": true }
+    "annotations": {
+      "grafana.app/createdBy": "access-policy:service",
+      "grafana.app/managedBy": "classic-file-provisioning",
+      "grafana.app/managerId": "sidecarProvider",
+      "grafana.app/sourceChecksum": "e9d0611e2169e3a5aa7c1a3de1ee99be",
+      "grafana.app/sourcePath": "/tmp/dashboards/shop.json",
+      "grafana.app/sourceTimestamp": "1791728546000",
+      "grafana.app/updatedBy": "access-policy:service",
+      "grafana.app/updatedTimestamp": "2026-10-11T14:22:26Z",
+      "grafana.app/folder": ""
     }
-  ]
+  },
+  "spec": {
+    "annotations": [
+      {
+        "kind": "AnnotationQuery",
+        "spec": {
+          "builtIn": true,
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "query": {
+            "datasource": {
+              "name": "-- Grafana --"
+            },
+            "group": "grafana",
+            "kind": "DataQuery",
+            "spec": {},
+            "version": "v0"
+          }
+        }
+      },
+      {
+        "kind": "AnnotationQuery",
+        "spec": {
+          "enable": true,
+          "hide": false,
+          "iconColor": "red",
+          "legacyOptions": {
+            "expr": "ALERTS{alertname=~\"Shop.*\", alertstate=\"firing\"}",
+            "step": "15s",
+            "titleFormat": "{{alertname}}"
+          },
+          "name": "Алерты shop (firing)",
+          "query": {
+            "datasource": {
+              "name": "${ds}"
+            },
+            "group": "prometheus",
+            "kind": "DataQuery",
+            "spec": {},
+            "version": "v0"
+          }
+        }
+      },
+      {
+        "kind": "AnnotationQuery",
+        "spec": {
+          "enable": true,
+          "hide": false,
+          "iconColor": "orange",
+          "legacyOptions": {
+            "expr": "(kube_pod_status_reason{reason=\"Evicted\", namespace=~\"$ns\"} == 1) or (kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\", namespace=~\"$ns\"} == 1)",
+            "step": "15s",
+            "titleFormat": "{{reason}}: {{pod}}"
+          },
+          "name": "Evicted / OOMKilled",
+          "query": {
+            "datasource": {
+              "name": "${ds}"
+            },
+            "group": "prometheus",
+            "kind": "DataQuery",
+            "spec": {},
+            "version": "v0"
+          }
+        }
+      }
+    ],
+    "cursorSync": "Crosshair",
+    "editable": true,
+    "elements": {
+      "panel-12": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (phase) (kube_pod_status_phase{namespace=~\"$ns\"})",
+                        "legendFormat": "{{phase}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 12,
+          "links": [],
+          "title": "Поды в namespace по фазам (Pending = не влезли)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 15,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "decimals": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "Pending"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "orange",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "Running"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "green",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "matcher": {
+                      "id": "byName",
+                      "options": "Failed"
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "red",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-13": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"cpu\"}) / sum by (node) (kube_node_status_allocatable{resource=\"cpu\"})",
+                        "legendFormat": "CPU {{node}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (node) (kube_pod_container_resource_requests{resource=\"memory\"}) / sum by (node) (kube_node_status_allocatable{resource=\"memory\"})",
+                        "legendFormat": "RAM {{node}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Планировщик смотрит на requests, а не на фактическое потребление. 100% = больше ничего не влезет.",
+          "id": 13,
+          "links": [],
+          "title": "Requests / allocatable по нодам (по чему считает планировщик)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 5,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "line"
+                    }
+                  },
+                  "max": 1.1,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  },
+                  "unit": "percentunit"
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-21": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=~\"$ns\", container!=\"\", container!=\"POD\"})",
+                        "legendFormat": "{{pod}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (pod) (kube_pod_container_resource_limits{namespace=~\"$ns\", resource=\"memory\"})",
+                        "legendFormat": "limit {{pod}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "OOMKilled = под упёрся в СВОЙ limit. Eviction = нехватка памяти на ноде, лимит пода при этом не достигнут.",
+          "id": 21,
+          "links": [],
+          "title": "Память подов: working set (сплошная) и limit (пунктир)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "bytes"
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": "^limit .*"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.lineStyle",
+                        "value": {
+                          "dash": [
+                            8,
+                            8
+                          ],
+                          "fill": "dash"
+                        }
+                      },
+                      {
+                        "id": "custom.lineWidth",
+                        "value": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "displayMode": "table",
+                  "placement": "right",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-22": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "node_memory_MemAvailable_bytes",
+                        "legendFormat": "available {{instance}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 22,
+          "links": [],
+          "title": "Память нод: доступно",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 8,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "bytes"
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-23": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "count(kube_pod_status_reason{reason=\"Evicted\", namespace=~\"$ns\"} == 1) or vector(0)"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 23,
+          "links": [],
+          "title": "Evicted (подов)",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "orange",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-24": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "count(kube_pod_container_status_last_terminated_reason{reason=\"OOMKilled\", namespace=~\"$ns\"} == 1) or vector(0)"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 24,
+          "links": [],
+          "title": "OOMKilled (контейнеров)",
+          "vizConfig": {
+            "group": "stat",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "percentChangeColorMode": "standard",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showPercentChange": false,
+                "textMode": "auto",
+                "wideLayout": true
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-25": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "kube_pod_status_qos_class{namespace=~\"$ns\"} == 1",
+                        "format": "table",
+                        "instant": true
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": [
+                {
+                  "group": "organize",
+                  "kind": "Transformation",
+                  "spec": {
+                    "options": {
+                      "excludeByName": {
+                        "Time": true,
+                        "Value": true,
+                        "__name__": true,
+                        "container": true,
+                        "endpoint": true,
+                        "instance": true,
+                        "job": true,
+                        "namespace": true,
+                        "service": true,
+                        "uid": true
+                      },
+                      "indexByName": {
+                        "pod": 1,
+                        "qos_class": 0
+                      }
+                    }
+                  }
+                },
+                {
+                  "group": "sortBy",
+                  "kind": "Transformation",
+                  "spec": {
+                    "options": {
+                      "sort": [
+                        {
+                          "field": "qos_class"
+                        },
+                        {
+                          "field": "pod"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "description": "",
+          "id": 25,
+          "links": [],
+          "title": "QoS-класс подов (порядок жертв: BestEffort → Burstable → Guaranteed)",
+          "vizConfig": {
+            "group": "table",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "align": "auto",
+                    "cellOptions": {
+                      "type": "auto"
+                    },
+                    "footer": {
+                      "reducers": []
+                    },
+                    "inspect": false
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "cellHeight": "sm",
+                "showHeader": true
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-31": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (container) (rate(container_cpu_usage_seconds_total{namespace=~\"$ns\", container!=\"\", container!=\"POD\"}[$__rate_interval]))",
+                        "legendFormat": "{{container}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (container) (kube_pod_container_resource_requests{namespace=~\"$ns\", resource=\"cpu\"})",
+                        "legendFormat": "request {{container}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Факт выше request — контейнер живёт за счёт чужого простоя и первым проиграет при борьбе за CPU.",
+          "id": 31,
+          "links": [],
+          "title": "CPU: факт (сплошная) vs request (пунктир) по контейнерам",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "decimals": 2,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "none"
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": "^request .*"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.lineStyle",
+                        "value": {
+                          "dash": [
+                            8,
+                            8
+                          ],
+                          "fill": "dash"
+                        }
+                      },
+                      {
+                        "id": "custom.lineWidth",
+                        "value": 1
+                      }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-32": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (container) (rate(container_cpu_cfs_throttled_periods_total{namespace=~\"$ns\", container!=\"\"}[$__rate_interval])) / sum by (container) (rate(container_cpu_cfs_periods_total{namespace=~\"$ns\", container!=\"\"}[$__rate_interval]))",
+                        "legendFormat": "{{container}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "Троттлинг появляется только у контейнеров с CPU limit. Без CPU limit давление проявляется как нехватка CPU shares, а не троттлинг.",
+          "id": 32,
+          "links": [],
+          "title": "CPU throttling: доля периодов с троттлингом",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 8,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "max": 1,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "percentunit"
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-33": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum(rate(batch_cpu_iterations_total{namespace=~\"$ns\"}[$__rate_interval]))",
+                        "legendFormat": "итераций/с (сумма)"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum(kube_pod_status_phase{namespace=~\"$ns\", pod=~\"shop-batch-.*\", phase=\"Running\"})",
+                        "legendFormat": "реплик Running"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum(kube_pod_status_phase{namespace=~\"$ns\", pod=~\"shop-batch-.*\", phase=\"Pending\"})",
+                        "legendFormat": "реплик Pending"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "C"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "batch_cpu_iterations_total — итерации цикла жжения CPU в секунду. Падает при борьбе за CPU: деградирует batch, а не api.",
+          "id": 33,
+          "links": [],
+          "title": "batch: пропускная способность (деградирует первым) и реплики",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 5,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": "реплик.*"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.axisPlacement",
+                        "value": "right"
+                      },
+                      {
+                        "id": "custom.drawStyle",
+                        "value": "bars"
+                      },
+                      {
+                        "id": "custom.fillOpacity",
+                        "value": 30
+                      },
+                      {
+                        "id": "decimals",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-35": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (pod) (increase(kube_pod_container_status_restarts_total{namespace=~\"$ns\"}[5m]))",
+                        "legendFormat": "{{pod}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 35,
+          "links": [],
+          "title": "Рестарты контейнеров (OOM / liveness)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 5,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "decimals": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-6": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))",
+                        "legendFormat": "p50"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))",
+                        "legendFormat": "p95"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "B"
+                  }
+                },
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval])))",
+                        "legendFormat": "p99"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "C"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 6,
+          "links": [],
+          "title": "api: задержка p50 / p95 / p99 (красная линия = SLA)",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 8,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "line"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "transparent",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 0.3
+                      }
+                    ]
+                  },
+                  "unit": "s"
+                },
+                "overrides": []
+              },
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "max",
+                    "lastNotNull"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      },
+      "panel-7": {
+        "kind": "Panel",
+        "spec": {
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "hidden": false,
+                    "query": {
+                      "datasource": {
+                        "name": "${ds}"
+                      },
+                      "group": "prometheus",
+                      "kind": "DataQuery",
+                      "spec": {
+                        "expr": "sum by (handler, code) (rate(http_requests_total{namespace=~\"$ns\", service=\"shop-api\", handler!=\"health\"}[$__rate_interval]))",
+                        "legendFormat": "{{handler}} {{code}}"
+                      },
+                      "version": "v0"
+                    },
+                    "refId": "A"
+                  }
+                }
+              ],
+              "queryOptions": {},
+              "transformations": []
+            }
+          },
+          "description": "",
+          "id": 7,
+          "links": [],
+          "title": "api: запросы/с по handler и коды ответа",
+          "vizConfig": {
+            "group": "timeseries",
+            "kind": "VizConfig",
+            "spec": {
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "axisBorderShow": false,
+                    "axisCenteredZero": false,
+                    "axisColorMode": "text",
+                    "axisLabel": "",
+                    "axisPlacement": "auto",
+                    "barAlignment": 0,
+                    "barWidthFactor": 0.6,
+                    "drawStyle": "line",
+                    "fillOpacity": 8,
+                    "gradientMode": "none",
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "insertNulls": false,
+                    "lineInterpolation": "linear",
+                    "lineWidth": 2,
+                    "pointSize": 5,
+                    "scaleDistribution": {
+                      "type": "linear"
+                    },
+                    "showPoints": "auto",
+                    "showValues": false,
+                    "spanNulls": false,
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    },
+                    "thresholdsStyle": {
+                      "mode": "off"
+                    }
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": 0
+                      },
+                      {
+                        "color": "red",
+                        "value": 80
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byRegexp",
+                      "options": ".* 5.."
+                    },
+                    "properties": [
+                      {
+                        "id": "color",
+                        "value": {
+                          "fixedColor": "red",
+                          "mode": "fixed"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "hideZeros": false,
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              }
+            },
+            "version": "13.2.3"
+          }
+        }
+      }
+    },
+    "layout": {
+      "kind": "RowsLayout",
+      "spec": {
+        "rows": [
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-31"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 0,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-32"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 12,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-33"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 0,
+                        "y": 8
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-35"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 12,
+                        "y": 8
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Ресурсы и гарантии (Части 3, 5)"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-12"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 0,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-13"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 12,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Размещение и планирование (Части 4, 6)"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-21"
+                        },
+                        "height": 9,
+                        "width": 12,
+                        "x": 0,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-22"
+                        },
+                        "height": 9,
+                        "width": 9,
+                        "x": 12,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-24"
+                        },
+                        "height": 4,
+                        "width": 3,
+                        "x": 21,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-23"
+                        },
+                        "height": 5,
+                        "width": 3,
+                        "x": 21,
+                        "y": 4
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-25"
+                        },
+                        "height": 8,
+                        "width": 24,
+                        "x": 0,
+                        "y": 9
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Давление и вытеснение (Часть 7)"
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "collapse": false,
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-6"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 0,
+                        "y": 0
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "panel-7"
+                        },
+                        "height": 8,
+                        "width": 12,
+                        "x": 12,
+                        "y": 0
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "SLA критического пути: заказ api → postgres (Часть 8)"
+            }
+          }
+        ]
+      }
+    },
+    "links": [],
+    "liveNow": false,
+    "preload": false,
+    "tags": [
+      "shop"
+    ],
+    "timeSettings": {
+      "autoRefresh": "10s",
+      "autoRefreshIntervals": [
+        "5s",
+        "10s",
+        "30s",
+        "1m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "1d"
+      ],
+      "fiscalYearStartMonth": 0,
+      "from": "now-30m",
+      "hideTimepicker": false,
+      "timezone": "browser",
+      "to": "now"
+    },
+    "title": "shop: SLA под перегрузкой",
+    "variables": [
+      {
+        "kind": "DatasourceVariable",
+        "spec": {
+          "allowCustomValue": true,
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "hide": "dontHide",
+          "includeAll": false,
+          "label": "Prometheus",
+          "multi": false,
+          "name": "ds",
+          "options": [],
+          "pluginId": "prometheus",
+          "refresh": "onDashboardLoad",
+          "regex": "",
+          "skipUrlSync": false
+        }
+      },
+      {
+        "kind": "QueryVariable",
+        "spec": {
+          "allowCustomValue": true,
+          "current": {
+            "text": "shop",
+            "value": "shop"
+          },
+          "definition": "label_values(kube_pod_info, namespace)",
+          "hide": "dontHide",
+          "includeAll": false,
+          "label": "namespace",
+          "multi": false,
+          "name": "ns",
+          "options": [],
+          "query": {
+            "datasource": {
+              "name": "${ds}"
+            },
+            "group": "prometheus",
+            "kind": "DataQuery",
+            "spec": {
+              "query": "label_values(kube_pod_info, namespace)",
+              "refId": "ns"
+            },
+            "version": "v0"
+          },
+          "refresh": "onTimeRangeChanged",
+          "regex": "",
+          "regexApplyTo": "value",
+          "skipUrlSync": false,
+          "sort": "disabled"
+        }
+      }
+    ]
+  }
 }

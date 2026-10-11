@@ -30,10 +30,11 @@ database:
   storageSize: 1Gi
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 50m
+      memory: 150Mi
     limits:
-      memory: 512Mi
+      cpu: 50m
+      memory: 150Mi
 
 api:
   replicas: 3
@@ -44,10 +45,12 @@ api:
   healthFail: false
   resources:
     requests:
-      cpu: 50m
-      memory: 32Mi
+      cpu: 20m
+      memory: 100Mi
     limits:
-      memory: 128Mi
+      cpu: 20m
+      memory: 100Mi
+
 worker:
   replicas: 2
   image: worker
@@ -58,10 +61,10 @@ worker:
   batchSize: 10
   resources:
     requests:
-      cpu: 25m
-      memory: 32Mi
+      cpu: 20m
+      memory: 100Mi
     limits:
-      memory: 128Mi
+      memory: 100Mi
 
 # Обновление без потери запросов
 rollout:
@@ -109,4 +112,4 @@ batch:
       cpu: 100m
       memory: 64Mi
     limits:
-      memory: 256Mi
+      memory: 560Mi
