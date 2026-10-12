@@ -1,0 +1,35 @@
+# Правила «утечки ПДн» для кейса «Страж персональных данных».
+# Это регулярные выражения, а не синтаксический разбор: они ошибаются в обе стороны,
+# и ровно для этого дальше стоит AI-разбор (ложные срабатывания -> dismissed).
+rules:
+  - id: pd-log-sensitive-object
+    languages: [generic]
+    severity: WARNING
+    message: В лог попадает объект или поле, похожее на ПДн (пациент, пользователь, тело запроса, диагноз)
+    paths:
+      include: ["*.js", "*.ts", "*.jsx", "*.tsx"]
+    pattern-regex: 'logger\.(info|warn|error|debug)\([^;]*\b(patient|user|req\.body|req\.headers|diagnosis|diary)\b'
+
+  - id: pd-console-log
+    languages: [generic]
+    severity: INFO
+    message: console.* в коде; проверьте, не выводятся ли данные пользователя
+    paths:
+      include: ["*.js", "*.ts", "*.jsx", "*.tsx"]
+    pattern-regex: 'console\.(log|info|debug|error)\('
+
+  - id: pd-error-response-leak
+    languages: [generic]
+    severity: WARNING
+    message: Сообщение или стек ошибки отдаётся клиенту в ответе
+    paths:
+      include: ["*.js", "*.ts"]
+    pattern-regex: 'res\.(status\(\d+\)\.)?(json|send)\([^;]*\b(err|error)\.(message|stack)'
+
+  - id: pd-external-analytics
+    languages: [generic]
+    severity: WARNING
+    message: Вызов внешней аналитики или сбора ошибок; проверьте, какие данные уходят третьему лицу
+    paths:
+      include: ["*.js", "*.ts", "*.jsx", "*.tsx"]
+    pattern-regex: '\b(analytics|amplitude|posthog|mixpanel|sentry)\.(track|identify|capture|setUser|logEvent)\('

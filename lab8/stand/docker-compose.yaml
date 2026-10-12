@@ -1,0 +1,145 @@
+# Стенд «Страж ПДн».
+name: pd-guard
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:?set N8N_VERSION in .env}
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      GENERIC_TIMEZONE: Europe/Moscow
+      TZ: Europe/Moscow
+      # Ключ шифрования credentials.
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+      # Публичный адрес для вебхуков.
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      # /metrics в формате Prometheus.
+      N8N_METRICS: "true"
+      N8N_METRICS_INCLUDE_WORKFLOW_ID_LABEL: "true"
+      N8N_METRICS_INCLUDE_NODE_TYPE_LABEL: "true"
+      N8N_METRICS_INCLUDE_MESSAGE_EVENT_BUS_METRICS: "true"
+      N8N_METRICS_INCLUDE_API_ENDPOINTS: "true"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # Доступ агента к GitHub: только чтение, только PR и содержимое репозитория.
+  # Порт наружу не публикуется — n8n ходит по http://mcp-github:8000/mcp внутри сети compose.
+  mcp-github:
+    build:
+      context: ./mcp-github
+      args:
+        GITHUB_MCP_VERSION: ${GITHUB_MCP_VERSION:?set GITHUB_MCP_VERSION in .env}
+        SUPERGATEWAY_VERSION: ${SUPERGATEWAY_VERSION:?set SUPERGATEWAY_VERSION in .env}
+    restart: unless-stopped
+    environment:
+      # Fine-grained PAT только на rehab-backend: Contents read, Pull requests read.
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_MCP_TOKEN:?set GITHUB_MCP_TOKEN in .env}
+    command:
+      - --stdio
+      - github-mcp-server stdio --read-only --toolsets pull_requests,repos
+      - --outputTransport
+      - streamableHttp
+      - --port
+      - "8000"
+      - --healthEndpoint
+      - /healthz
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Доступ агента к юридическим документам: каталог смонтирован read-only.
+  mcp-fs:
+    build:
+      context: ./mcp-fs
+      args:
+        SUPERGATEWAY_VERSION: ${SUPERGATEWAY_VERSION}
+        FS_MCP_VERSION: ${FS_MCP_VERSION:?set FS_MCP_VERSION in .env}
+    restart: unless-stopped
+    volumes:
+      - ./legal-docs:/docs:ro
+    command:
+      - --stdio
+      - mcp-server-filesystem /docs
+      - --outputTransport
+      - streamableHttp
+      - --port
+      - "8000"
+      - --healthEndpoint
+      - /healthz
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Статический анализ изменённых файлов PR. n8n шлёт POST /scan, runner клонирует коммит
+  # (токен только на чтение) и запускает semgrep с правилами из ./semgrep-runner/rules.
+  semgrep-runner:
+    build:
+      context: ./semgrep-runner
+      args:
+        GO_VERSION: ${GO_VERSION:?set GO_VERSION in .env}
+        SEMGREP_VERSION: ${SEMGREP_VERSION:?set SEMGREP_VERSION in .env}
+    restart: unless-stopped
+    environment:
+      GITHUB_TOKEN: ${GITHUB_MCP_TOKEN:?set GITHUB_MCP_TOKEN in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # Мониторинг. Порты только на localhost хоста.
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:?set PROMETHEUS_VERSION in .env}
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - n8n
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:?set GRAFANA_VERSION in .env}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+networks:
+  default:
+    driver_opts:
+      com.docker.network.driver.mtu: "1280"
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+
+volumes:
+  n8n_data:
+  prometheus_data:
+  grafana_data:
