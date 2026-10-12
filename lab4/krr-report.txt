@@ -18,7 +18,7 @@ Running Robusta's KRR (Kubernetes Resource Recommender) v1.30.0
 Using strategy: Simple
 Using formatter: table
 
-[17:17:36] INFO     Using clusters: ['minikube']                                                                             runner.py:432
+[11:11:56] INFO     Using clusters: ['minikube']                                                                             runner.py:432
            INFO     Prometheus URL is specified, will not auto-detect a metrics service                                       loader.py:56
            INFO     Trying to connect to Prometheus for minikube cluster                                  prometheus_metrics_service.py:71
            INFO     Using Prometheus at http://localhost:9090 for cluster minikube                       prometheus_metrics_service.py:100
@@ -26,11 +26,11 @@ Using formatter: table
            INFO     Prometheus connected successfully for minikube cluster                                                    loader.py:48
            WARNING  Not enough history available for cluster minikube.                                                       runner.py:387
            WARNING  If the cluster is freshly installed, it might take some time for the enough data to be available.        runner.py:390
-           WARNING  Enough data is estimated to be available after 2026-10-11 17:17:36, but will try to calculate            runner.py:393
+           WARNING  Enough data is estimated to be available after 2026-10-12 10:41:57, but will try to calculate            runner.py:393
                     recommendations anyway.                                                                                               
            INFO     Listing scannable objects in minikube                                                                  __init__.py:105
+[11:11:57] INFO     Calculated recommendations for Deployment shop/shop-batch/batch (using 4 metrics)                        runner.py:359
            INFO     Calculated recommendations for Deployment shop/shop-api/api (using 4 metrics)                            runner.py:359
-           INFO     Calculated recommendations for Deployment shop/shop-batch/batch (using 4 metrics)                        runner.py:359
            INFO     Calculated recommendations for Deployment shop/shop-worker/worker (using 4 metrics)                      runner.py:359
            INFO     Result collected, displaying...                                                                          runner.py:496
                                                                                                                                           
@@ -38,7 +38,7 @@ Simple Strategy
                                                                                                                                           
 CPU request: 95.0% percentile, limit: unset                                                                                               
 Memory request: max + 15.0%, limit: max + 15.0%                                                                                           
-History: 1.0 hours                                                                                                                        
+History: 1.5 hours                                                                                                                        
 Step: 0.25 minutes                                                                                                                        
                                                                                                                                           
 All parameters can be customized. For example: `krr simple --cpu_percentile=90 --memory_buffer_percentage=15 --history_duration=24        
@@ -54,16 +54,16 @@ Learn more: https://github.com/robusta-dev/krr#algorithm
 ┃        ┃          ┃          ┃      ┃          ┃          ┃          ┃          ┃ CPU      ┃ CPU      ┃ Memory   ┃ Memory   ┃ Memory   ┃
 ┃ Number ┃ Namespa… ┃ Name     ┃ Pods ┃ Old Pods ┃ Type     ┃ Contain… ┃ CPU Diff ┃ Requests ┃ Limits   ┃ Diff     ┃ Requests ┃ Limits   ┃
 ┡━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━┩
-│     1. │ shop     │ shop-api │ 3    │ 3        │ Deploym… │ api      │ -120m    │ (-40m)   │ unset    │ +204Mi   │ (+68Mi)  │ 128Mi -> │
-│        │          │          │      │          │          │          │ (3 pods) │ 50m ->   │          │ (3 pods) │ 32Mi ->  │ 100Mi    │
-│        │          │          │      │          │          │          │          │ 10m      │          │          │ 100Mi    │          │
+│     1. │ shop     │ shop-api │ 3    │ 0        │ Deploym… │ api      │ -213m    │ (-71m)   │ unset    │ -84Mi    │ (-28Mi)  │ 128Mi -> │
+│        │          │          │      │          │          │          │ (3 pods) │ 100m ->  │          │ (3 pods) │ 128Mi -> │ 100Mi    │
+│        │          │          │      │          │          │          │          │ 29m      │          │          │ 100Mi    │          │
 ├────────┼──────────┼──────────┼──────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
-│     2. │ shop     │ shop-ba… │ 1    │ 0        │ Deploym… │ batch    │ +459m    │ (+459m)  │ unset    │ +36Mi    │ (+36Mi)  │ 256Mi -> │
+│     2. │ shop     │ shop-ba… │ 1    │ 0        │ Deploym… │ batch    │ +493m    │ (+493m)  │ unset    │ +36Mi    │ (+36Mi)  │ 560Mi -> │
 │        │          │          │      │          │          │          │          │ 100m ->  │          │          │ 64Mi ->  │ 100Mi    │
-│        │          │          │      │          │          │          │          │ 559m     │          │          │ 100Mi    │          │
+│        │          │          │      │          │          │          │          │ 593m     │          │          │ 100Mi    │          │
 ├────────┼──────────┼──────────┼──────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
-│     3. │ shop     │ shop-wo… │ 2    │ 2        │ Deploym… │ worker   │ -30m     │ (-15m)   │ unset    │ +136Mi   │ (+68Mi)  │ 128Mi -> │
-│        │          │          │      │          │          │          │ (2 pods) │ 25m ->   │          │ (2 pods) │ 32Mi ->  │ 100Mi    │
+│     3. │ shop     │ shop-wo… │ 2    │ 0        │ Deploym… │ worker   │ -180m    │ (-90m)   │ unset    │ -56Mi    │ (-28Mi)  │ 128Mi -> │
+│        │          │          │      │          │          │          │ (2 pods) │ 100m ->  │          │ (2 pods) │ 128Mi -> │ 100Mi    │
 │        │          │          │      │          │          │          │          │ 10m      │          │          │ 100Mi    │          │
 └────────┴──────────┴──────────┴──────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
                                                               76 points - B                                                               

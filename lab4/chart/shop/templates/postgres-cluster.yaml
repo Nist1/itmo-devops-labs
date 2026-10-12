@@ -8,6 +8,8 @@ metadata:
     {{- include "shop.labels" $ctx | nindent 4 }}
 spec:
   instances: {{ .Values.database.instances }}
+  priorityClassName: {{ .Values.priority.critical.name }}
+  enablePDB: {{ .Values.database.enablePDB }}
   inheritedMetadata:
     labels:
       app.kubernetes.io/name: postgres

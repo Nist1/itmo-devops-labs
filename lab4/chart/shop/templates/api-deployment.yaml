@@ -27,6 +27,7 @@ spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- include "shop.placement" $ctx | nindent 6 }}
+      priorityClassName: {{ .Values.priority.critical.name }}
       containers:
         - name: api
           image: "{{ .Values.image.registry }}/{{ .Values.api.image }}:{{ .Values.api.tag }}"

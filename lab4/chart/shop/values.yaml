@@ -30,11 +30,12 @@ database:
   storageSize: 1Gi
   resources:
     requests:
-      cpu: 50m
-      memory: 150Mi
+      cpu: 1000m
+      memory: 256Mi
     limits:
-      cpu: 50m
-      memory: 150Mi
+      cpu: 1000m
+      memory: 256Mi
+  enablePDB: false
 
 api:
   replicas: 3
@@ -45,10 +46,10 @@ api:
   healthFail: false
   resources:
     requests:
-      cpu: 20m
+      cpu: 60m
       memory: 100Mi
     limits:
-      cpu: 20m
+      cpu: 60m
       memory: 100Mi
 
 worker:
@@ -61,7 +62,7 @@ worker:
   batchSize: 10
   resources:
     requests:
-      cpu: 20m
+      cpu: 10m
       memory: 100Mi
     limits:
       memory: 100Mi
@@ -97,7 +98,7 @@ placement:
 
 # Фоновая нагрузка (Часть 2). Реплики/CPU/память крутим здесь в Частях 6-7.
 batch:
-  replicas: 1
+  replicas: 3
   image: batch
   tag: "0.1.0"
   port: 8080
@@ -109,7 +110,27 @@ batch:
   # Исходная догадка. Burstable: requests заметно ниже limits (Часть 5)
   resources:
     requests:
-      cpu: 100m
+      cpu: 500m
       memory: 64Mi
     limits:
       memory: 560Mi
+
+priority:
+  critical:
+    name: shop-critical
+    value: 100000
+    description: Критический путь заказа (api, postgres, worker)
+  background:
+    name: shop-background
+    value: -1000
+    description: Фоновая нагрузка (batch)
+
+pdb:
+  enabled: true
+  api:
+    maxUnavailable: 1
+  database:
+    minAvailable: 1
+    selectorLabels:
+      cnpg.io/cluster: shop-db
+      cnpg.io/instanceRole: primary

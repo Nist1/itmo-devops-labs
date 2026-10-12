@@ -20,6 +20,7 @@ spec:
       terminationGracePeriodSeconds: 10
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      priorityClassName: {{ .Values.priority.background.name }}
       containers:
         - name: batch
           image: "{{ .Values.image.registry }}/{{ .Values.batch.image }}:{{ .Values.batch.tag }}"
