@@ -64,7 +64,7 @@
 
 ### Что поднимается
 
-Весь стенд описан одним `compose.yaml` в каталоге [`stand/`](./stand):
+Весь стенд описан одним [`stand/docker-compose.yaml`](./stand/docker-compose.yaml) в каталоге [`stand/`](./stand):
 
 | Сервис | Назначение | Порт на хосте |
 |---|---|---|
