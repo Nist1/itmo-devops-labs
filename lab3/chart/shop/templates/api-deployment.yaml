@@ -1,0 +1,73 @@
+{{- $ctx := dict "root" . "component" "api" "tag" .Values.api.tag }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shop.fullname" . }}-api
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # maxUnavailable 0: старый под удаляется только когда новый уже Ready.
+      # С сломанным образом/HEALTH_FAIL новые поды не станут Ready, и старые останутся.
+      maxSurge: {{ .Values.rollout.maxSurge }}
+      maxUnavailable: {{ .Values.rollout.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "shop.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      # Метки шаблона пода проверяет политика (через autogen) — part-of обязателен здесь
+      labels:
+        {{- include "shop.labels" $ctx | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: {{ .Values.rollout.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: api
+          image: "{{ .Values.image.registry }}/{{ .Values.api.image }}:{{ .Values.api.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PORT
+              value: {{ .Values.api.port | quote }}
+            - name: APP_VERSION
+              value: {{ .Values.api.tag | quote }}
+            - name: HEALTH_FAIL
+              value: {{ .Values.api.healthFail | quote }}
+            # optional: true — в Части 2 postgres ещё нет, и без этого под не стартует
+            # (CreateContainerConfigError). Env читается при старте контейнера: после
+            # появления секрета поды надо перезапустить (kubectl rollout restart).
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.clusterName }}-app
+                  key: {{ .Values.database.secretKey }}
+                  optional: true
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              # В distroless нет shell и sleep — используем встроенное действие kubelet
+              sleep:
+                seconds: {{ .Values.rollout.preStopSleepSeconds }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

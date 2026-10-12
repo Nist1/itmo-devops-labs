@@ -1,0 +1,37 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: disallow-privileged-containers
+  annotations:
+    policies.kyverno.io/description: >-
+      Запрещены securityContext.privileged: true и
+      allowPrivilegeEscalation: true (containers и initContainers).
+spec:
+  validationActions: [Deny]
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, kyverno, monitoring, local-path-storage, cnpg-system]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
+  variables:
+    - name: containers
+      expression: >-
+        object.spec.containers +
+        (has(object.spec.initContainers) ? object.spec.initContainers : [])
+  validations:
+    # Optional-синтаксис: c.?securityContext.?privileged — значение или "пусто",
+    # .orValue(false) подставляет false, если любого уровня нет. Без цепочки has().
+    - expression: >-
+        variables.containers.all(c,
+          !c.?securityContext.?privileged.orValue(false) &&
+          !c.?securityContext.?allowPrivilegeEscalation.orValue(false))
+      message: "privileged и allowPrivilegeEscalation: true запрещены."

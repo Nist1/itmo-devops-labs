@@ -1,0 +1,6 @@
+apiVersion: v2
+name: shop
+description: Платформа shop — api, worker и (в Части 3) postgres через оператор CloudNativePG
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

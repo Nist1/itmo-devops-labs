@@ -1,0 +1,18 @@
+# Нарушает ТОЛЬКО правило 3 (require-ownership-labels): нет part-of.
+# Метка name есть — видно, что проверяется каждая метка по отдельности.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: violation-no-labels
+  namespace: shop
+  labels:
+    app.kubernetes.io/name: violation-no-labels
+spec:
+  containers:
+    - name: api
+      image: registry.local/shop/api:0.1.0
+      securityContext:
+        allowPrivilegeEscalation: false
+      resources:
+        requests: {cpu: 50m, memory: 32Mi}
+        limits: {memory: 128Mi}

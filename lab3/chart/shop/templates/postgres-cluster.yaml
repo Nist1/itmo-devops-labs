@@ -1,0 +1,23 @@
+{{- $ctx := dict "root" . "component" "postgres" "tag" "operator-default" }}
+
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.database.clusterName }}
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  instances: {{ .Values.database.instances }}
+  inheritedMetadata:
+    labels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/part-of: {{ .Values.partOf }}
+  storage:
+    size: {{ .Values.database.storageSize }}
+  resources:
+    {{- toYaml .Values.database.resources | nindent 4 }}
+  bootstrap:
+    initdb:
+      database: {{ .Values.database.name }}
+      owner: {{ .Values.database.owner }}
+

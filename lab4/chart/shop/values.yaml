@@ -1,0 +1,136 @@
+# Метка app.kubernetes.io/part-of на всех подах (требует политика require-ownership-labels)
+partOf: shop
+
+image:
+  # Префикс обязан попадать под политику restrict-image-registries
+  registry: registry.local/shop
+  # Реестра registry.local не существует: образы лежат только в containerd ноды
+  pullPolicy: IfNotPresent
+
+# Общий securityContext контейнеров (политика disallow-privileged-containers)
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+database:
+  clusterName: shop-db
+  secretKey: uri
+  name: shop
+  owner: shop
+  instances: 1
+  storageSize: 1Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 256Mi
+  enablePDB: false
+
+api:
+  replicas: 3
+  image: api
+  tag: "0.1.0"
+  port: 8080
+  # HEALTH_FAIL=true заставляет /health отвечать 500 (сломанный релиз, Часть 2)
+  healthFail: false
+  resources:
+    requests:
+      cpu: 60m
+      memory: 100Mi
+    limits:
+      cpu: 60m
+      memory: 100Mi
+
+worker:
+  replicas: 2
+  image: worker
+  tag: "0.1.0"
+  port: 8080
+  healthFail: false
+  pollInterval: 2s
+  batchSize: 10
+  resources:
+    requests:
+      cpu: 10m
+      memory: 100Mi
+    limits:
+      memory: 100Mi
+
+# Обновление без потери запросов
+rollout:
+  maxSurge: 1
+  maxUnavailable: 0
+  # Пауза перед SIGTERM: за это время под успевает исчезнуть из EndpointSlice
+  # и kube-proxy на нодах, и новые запросы перестают на него приходить
+  preStopSleepSeconds: 5
+  terminationGracePeriodSeconds: 30
+
+monitoring:
+  enabled: true
+  interval: 15s
+  alerts:
+    errorRateThreshold: 0.05
+    workerStalledSeconds: 60
+
+
+# Разнесение реплик api по нодам (Часть 1)
+placement:
+  # topologySpread | antiAffinity
+  mechanism: topologySpread
+  topologyKey: kubernetes.io/hostname
+  # topologySpread: максимально допустимая разница числа подов между нодами
+  maxSkew: 1
+  # topologySpread: DoNotSchedule (жёстко) | ScheduleAnyway (мягко)
+  whenUnsatisfiable: DoNotSchedule
+  # antiAffinity: required (жёстко) | preferred (мягко)
+  antiAffinityMode: required
+
+# Фоновая нагрузка (Часть 2). Реплики/CPU/память крутим здесь в Частях 6-7.
+batch:
+  replicas: 3
+  image: batch
+  tag: "0.1.0"
+  port: 8080
+  cpuWorkers: 1
+  cpuDuty: 0.5
+  memTargetMB: 64
+  memStepMB: 16
+  memStepInterval: 2s
+  # Исходная догадка. Burstable: requests заметно ниже limits (Часть 5)
+  resources:
+    requests:
+      cpu: 500m
+      memory: 64Mi
+    limits:
+      memory: 560Mi
+
+priority:
+  critical:
+    name: shop-critical
+    value: 100000
+    description: Критический путь заказа (api, postgres, worker)
+  background:
+    name: shop-background
+    value: -1000
+    description: Фоновая нагрузка (batch)
+
+pdb:
+  enabled: true
+  api:
+    maxUnavailable: 1
+  database:
+    minAvailable: 1
+    selectorLabels:
+      cnpg.io/cluster: shop-db
+      cnpg.io/instanceRole: primary

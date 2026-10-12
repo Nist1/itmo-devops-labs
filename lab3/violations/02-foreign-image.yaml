@@ -1,0 +1,19 @@
+# Нарушает ТОЛЬКО правило 2 (restrict-image-registries): образ с docker.io.
+# Тег явный (1.27), лимиты, метки и securityContext как в 00-compliant.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: violation-foreign-image
+  namespace: shop
+  labels:
+    app.kubernetes.io/name: violation-foreign-image
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: web
+      image: docker.io/library/nginx:1.27
+      securityContext:
+        allowPrivilegeEscalation: false
+      resources:
+        requests: {cpu: 50m, memory: 32Mi}
+        limits: {memory: 128Mi}

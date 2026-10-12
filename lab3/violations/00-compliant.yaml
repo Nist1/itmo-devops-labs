@@ -1,0 +1,25 @@
+# Контрольный под: проходит ВСЕ пять политик. Применять с --dry-run=server.
+# Если он начал получать отказ — сломалась (или написана с ошибкой) последняя добавленная политика.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant
+  namespace: shop
+  labels:
+    app.kubernetes.io/name: compliant
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: api
+      image: registry.local/shop/api:0.1.0
+      imagePullPolicy: IfNotPresent
+      ports:
+        - containerPort: 8080
+      securityContext:
+        allowPrivilegeEscalation: false
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          memory: 128Mi

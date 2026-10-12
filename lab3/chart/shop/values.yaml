@@ -1,0 +1,81 @@
+# Метка app.kubernetes.io/part-of на всех подах (требует политика require-ownership-labels)
+partOf: shop
+
+image:
+  # Префикс обязан попадать под политику restrict-image-registries
+  registry: registry.local/shop
+  # Реестра registry.local не существует: образы лежат только в containerd ноды
+  pullPolicy: IfNotPresent
+
+# Общий securityContext контейнеров (политика disallow-privileged-containers)
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+database:
+  clusterName: shop-db
+  secretKey: uri
+  name: shop
+  owner: shop
+  instances: 1
+  storageSize: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+api:
+  replicas: 3
+  image: api
+  tag: "0.1.0"
+  port: 8080
+  # HEALTH_FAIL=true заставляет /health отвечать 500 (сломанный релиз, Часть 2)
+  healthFail: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+worker:
+  replicas: 2
+  image: worker
+  tag: "0.1.0"
+  port: 8080
+  healthFail: false
+  pollInterval: 2s
+  batchSize: 10
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+# Обновление без потери запросов
+rollout:
+  maxSurge: 1
+  maxUnavailable: 0
+  # Пауза перед SIGTERM: за это время под успевает исчезнуть из EndpointSlice
+  # и kube-proxy на нодах, и новые запросы перестают на него приходить
+  preStopSleepSeconds: 5
+  terminationGracePeriodSeconds: 30
+
+monitoring:
+  enabled: true
+  interval: 15s
+  alerts:
+    errorRateThreshold: 0.05
+    workerStalledSeconds: 60
+

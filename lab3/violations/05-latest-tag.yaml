@@ -1,0 +1,19 @@
+# Нарушает ТОЛЬКО правило 5 (disallow-latest-tag): тег latest.
+# Реестр доверенный, лимиты и метки есть.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: violation-latest
+  namespace: shop
+  labels:
+    app.kubernetes.io/name: violation-latest
+    app.kubernetes.io/part-of: shop
+spec:
+  containers:
+    - name: api
+      image: registry.local/shop/api:latest
+      securityContext:
+        allowPrivilegeEscalation: false
+      resources:
+        requests: {cpu: 50m, memory: 32Mi}
+        limits: {memory: 128Mi}
