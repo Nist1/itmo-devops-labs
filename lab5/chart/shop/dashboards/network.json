@@ -1,0 +1,276 @@
+{
+  "uid": "shop-network",
+  "title": "shop: сеть и политики",
+  "tags": [
+    "shop",
+    "cilium",
+    "lab5"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Клиент: заказы в секунду",
+      "description": "loadgen -> api по DNS-имени. Ошибки должны быть 0.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(loadgen_requests_total{result=\"ok\"}[1m]))",
+          "legendFormat": "ok"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(loadgen_requests_total{result!=\"ok\"}[1m])) or vector(0)",
+          "legendFormat": "ошибки"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Новые TCP-соединения из shop (SYN/с)",
+      "description": "Hubble: SYN по рёбрам — кто кому открывает соединения.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (source_workload, destination_workload) (rate(hubble_tcp_flags_total{flag=\"SYN\", source_namespace=\"shop\", destination_workload!=\"\"}[1m]))",
+          "legendFormat": "{{source_workload}} -> {{destination_workload}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Отклонено политикой (пакетов/с)",
+      "description": "Вход в shop от посторонних — ожидаемо (intruder). Выход из shop — поломка политики или подозрительный под.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (source_namespace, source_workload, destination_workload) (rate(hubble_drop_total{reason=\"POLICY_DENIED\", destination_namespace=\"shop\", traffic_direction=\"ingress\"}[1m]))",
+          "legendFormat": "вход: {{source_namespace}}/{{source_workload}} -> {{destination_workload}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (source_workload, destination_namespace, destination_workload) (rate(hubble_drop_total{reason=\"POLICY_DENIED\", source_namespace=\"shop\", traffic_direction=\"egress\"}[1m]))",
+          "legendFormat": "выход: {{source_workload}} -> {{destination_namespace}}/{{destination_workload}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "DNS",
+      "description": "CoreDNS — работа сервера; дропы — запросы, которые до него не дошли.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (rcode) (rate(coredns_dns_responses_total[1m]))",
+          "legendFormat": "CoreDNS ответы {{rcode}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(hubble_drop_total{destination_workload=\"coredns\"}[1m])) or vector(0)",
+          "legendFormat": "DNS-запросы, отрезанные политикой"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Заполненность CT map Cilium",
+      "description": "Переполнение = дроп новых потоков (инцидент Части 2).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (node, map_name) (cilium_bpf_map_pressure{map_name=~\"ct.*_global\"})",
+          "legendFormat": "{{node}} {{map_name}}"
+        }
+      ]
+    }
+  ]
+}

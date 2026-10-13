@@ -1,0 +1,32 @@
+{{- if and .Values.networkPolicy.enabled .Values.networkPolicy.dns.enabled }}
+{{- $ctx := dict "root" . "component" "networkpolicy" "tag" .Chart.AppVersion }}
+{{- $dns := .Values.networkPolicy.dns }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "shop.fullname" . }}-allow-dns
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          {{- toYaml $dns.clients | nindent 10 }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $dns.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $dns.podLabels | nindent 14 }}
+      ports:
+        - protocol: UDP
+          port: {{ $dns.port }}
+        - protocol: TCP
+          port: {{ $dns.port }}
+{{- end }}

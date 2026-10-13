@@ -1,0 +1,17 @@
+{{- if .Values.loadgen.enabled }}
+{{- $ctx := dict "root" . "component" "loadgen" "tag" .Values.loadgen.tag }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shop.fullname" . }}-loadgen
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "shop.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.loadgen.port }}
+      targetPort: http
+{{- end }}

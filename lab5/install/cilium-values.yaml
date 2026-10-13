@@ -1,0 +1,42 @@
+# Cilium вместо kindnet в существующем minikube (2 ноды, docker driver, containerd)
+kubeProxyReplacement: "false"
+
+k8sServiceHost: 192.168.49.2
+k8sServicePort: 8443
+
+ipam:
+  mode: kubernetes
+
+routingMode: native
+autoDirectNodeRoutes: true
+ipv4NativeRoutingCIDR: 10.244.0.0/16
+
+enableIPv4Masquerade: true
+
+cni:
+  exclusive: true
+
+operator:
+  replicas: 1
+
+hubble:
+  enabled: true
+  # Метрики потоков на :9965 (Service hubble-metrics). Без pod/IP в метках:
+  # иначе каждый новый под (хаос из Части 2) плодит новые ряды
+  metrics:
+    enabled:
+      - "drop:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload,traffic_direction"
+      - "tcp:labelsContext=source_namespace,source_workload,destination_namespace,destination_workload"
+      - "flow:labelsContext=source_namespace,destination_namespace"
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+
+bpf:
+  ctAnyMax: 262144
+  ctTcpMax: 262144
+
+# Метрики агента на :9962 (cilium_drop_count_total, cilium_bpf_map_pressure, ...)
+prometheus:
+  enabled: true

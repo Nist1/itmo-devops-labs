@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: intruder
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: intruder
+  namespace: intruder
+  labels:
+    app.kubernetes.io/name: intruder
+    app.kubernetes.io/part-of: lab5-matrix
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: intruder
+      image: registry.local/shop/loadgen:0.1.0
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: TARGET_URL
+          value: "http://shop-api.shop.svc.cluster.local.:8080/order"
+        - name: RPS
+          value: "1"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          memory: 32Mi

@@ -1,0 +1,56 @@
+{{- if .Values.loadgen.enabled }}
+{{- $ctx := dict "root" . "component" "loadgen" "tag" .Values.loadgen.tag }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shop.fullname" . }}-loadgen
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.loadgen.replicas }}
+  selector:
+    matchLabels:
+      {{- include "shop.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shop.labels" $ctx | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: loadgen
+          image: "{{ .Values.image.registry }}/{{ .Values.loadgen.image }}:{{ .Values.loadgen.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PORT
+              value: {{ .Values.loadgen.port | quote }}
+            - name: TARGET_URL
+              value: {{ printf "http://%s-api.%s.svc.cluster.local.:%v/order" (include "shop.fullname" .) .Release.Namespace .Values.api.port | quote }}
+            - name: RPS
+              value: {{ .Values.loadgen.rps | quote }}
+            - name: KEEPALIVE
+              value: {{ .Values.loadgen.keepAlive | quote }}
+            - name: TIMEOUT
+              value: {{ .Values.loadgen.timeout | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.loadgen.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.loadgen.resources | nindent 12 }}
+{{- end }}
