@@ -64,7 +64,7 @@
 
 ### Что поднимается
 
-Весь стенд описан одним `compose.yaml` в каталоге [`stand/`](./stand):
+Весь стенд описан одним [`docker-compose.yaml`](./stand/docker-compose.yaml) в каталоге [`stand/`](./stand):
 
 | Сервис | Назначение | Порт на хосте |
 |---|---|---|
@@ -81,7 +81,7 @@
 1. Нужны Docker с Compose и доступ в интернет (VPN при необходимости: образы, GitHub, OpenRouter)
 2. `cp .env.example .env` и заполнить: версии образов, `N8N_ENCRYPTION_KEY` (`openssl rand -hex 32`), `GITHUB_MCP_TOKEN` (fine-grained токен только на чтение: Contents и Pull requests), пароль Grafana
 3. `docker compose up -d --build`
-4. В n8n (`http://localhost:5678`): создать credentials — **GitHub API** (fine-grained токен с правом записи: Pull requests, Issues, Commit statuses; им публикуются комментарий, метки и статус) и **OpenRouter** (ключ). Импортировать [`workflow/pd-guard.json`](./workflow/pd-guard.json), выбрать credentials в нодах и опубликовать workflow
+4. В n8n (`http://localhost:5678`): создать credentials — **GitHub API** (fine-grained токен с правом записи: Pull requests, Issues, Commit statuses; им публикуются комментарий, метки и статус) и **OpenRouter** (ключ). Импортировать [`pd-guard-workflow.json`](./pd-guard-workflow.json), выбрать credentials в нодах и опубликовать workflow
 5. Сделать n8n доступным для GitHub: у стенда нет публичного адреса, поэтому использовался туннель pinggy (`ssh -p 443 -R0:localhost:5678 a.pinggy.io` бесплатный адрес живёт около часа). В репозитории `rehab-backend`: Settings → Webhooks → Payload URL `https://<адрес-туннеля>/webhook/github-pr`, Content type `application/json`, событие **Pull requests**
 6. Открыть PR в `main`. В n8n на вкладке Executions появится выполнение, в PR комментарий, метка и статус `pd-guard`
 
@@ -131,7 +131,7 @@ Workflow запускался на PR №2 (`feature/pain-diary` → `main`) с 
 
 Инструмент: **Prometheus + Grafana**. Удобно, что n8n сам отдаёт метрики в формате Prometheus (`N8N_METRICS=true`, эндпоинт `/metrics`). Prometheus опрашивает его каждые 15 секунд, источник данных и дашборд в Grafana создаются из файлов (provisioning), стенд поднимается одной командой.
 
-Дашборд «Страж ПДн: n8n» ([`stand/monitoring/grafana/dashboards/pd-guard.json`](./stand/monitoring/grafana/dashboards/pd-guard.json)). Метрики выбраны: жив ли процесс, не ломается ли он, не кончается ли ресурс, который его ограничивает (лимиты модели по токенам).
+Дашборд «Страж ПДн: n8n» ([`stand/monitoring/grafana/pd-guard-dashboard.json`](./stand/monitoring/grafana/pd-guard-dashboard.json)). Метрики выбраны: жив ли процесс, не ломается ли он, не кончается ли ресурс, который его ограничивает (лимиты модели по токенам).
 
 | Панель | Метрика | Что показывает |
 |---|---|---|
