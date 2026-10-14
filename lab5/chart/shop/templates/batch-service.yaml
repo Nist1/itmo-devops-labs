@@ -1,0 +1,16 @@
+{{- $ctx := dict "root" . "component" "batch" "tag" .Values.batch.tag }}
+# Входящего трафика у batch нет; Service нужен только для /metrics (ServiceMonitor)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shop.fullname" . }}-batch
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "shop.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.batch.port }}
+      targetPort: http

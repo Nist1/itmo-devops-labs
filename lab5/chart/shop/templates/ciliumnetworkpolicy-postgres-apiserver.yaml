@@ -1,0 +1,23 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $ctx := dict "root" . "component" "networkpolicy" "tag" .Chart.AppVersion }}
+{{- $np := .Values.networkPolicy }}
+# Единственное ребро вне стандартной NetworkPolicy: API-сервер живёт на IP ноды
+# (identity kube-apiserver), а ipBlock в Cilium такие identity не выбирает
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "shop.fullname" . }}-postgres-to-apiserver
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- toYaml $np.database.podLabels | nindent 6 }}
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: {{ $np.apiServerPort | quote }}
+              protocol: TCP
+{{- end }}

@@ -1,0 +1,13 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.cilium.enabled }}
+{{- $ctx := dict "root" . "component" "monitoring" "tag" .Chart.AppVersion }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "shop.fullname" . }}-network-dashboard
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  shop-network.json: |-
+{{ .Files.Get "dashboards/network.json" | indent 4 }}
+{{- end }}
