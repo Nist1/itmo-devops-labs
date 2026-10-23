@@ -1,0 +1,14 @@
+{{- if and .Values.monitoring.enabled .Values.mesh.enabled }}
+{{- $ctx := dict "root" . "component" "monitoring" "tag" .Chart.AppVersion }}
+# Лаба 6: дашборд по метрикам mesh — надёжность, деление трафика, гейт, цена прокси
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "shop.fullname" . }}-mesh-dashboard
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  shop-mesh.json: |-
+{{ .Files.Get "dashboards/mesh.json" | indent 4 }}
+{{- end }}

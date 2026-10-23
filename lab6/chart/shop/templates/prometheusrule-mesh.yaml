@@ -1,0 +1,78 @@
+{{- if and .Values.monitoring.enabled .Values.mesh.enabled }}
+{{- $ctx := dict "root" . "component" "monitoring" "tag" .Chart.AppVersion }}
+{{- $ns := .Release.Namespace }}
+{{- $a := .Values.monitoring.meshAlerts }}
+{{- /* inbound-метрики прокси на подах api, только mTLS-трафик из mesh (без проб и скрейпов) */}}
+{{- $in := printf "namespace=\"%s\", app=\"api\", direction=\"inbound\", tls=\"true\"" $ns }}
+# Лаба 6: алерты поверх метрик mesh (Linkerd). Алерты Лабы 3 (prometheusrule.yaml) остаются.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "shop.fullname" . }}-mesh-alerts
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  groups:
+    - name: shop.mesh.rules
+      rules:
+        # 1. Версия api отвечает ошибками. По версиям: при канарейке 10% плохая v2 в общей
+        #    доле ошибок почти не видна, а в своей — 100%.
+        - alert: ShopApiVersionHighErrorRate
+          expr: |
+            sum by (version) (rate(response_total{ {{- $in }}, classification="failure"}[2m]))
+              /
+            sum by (version) (rate(response_total{ {{- $in }}}[2m]))
+              > {{ $a.errorRateThreshold }}
+          for: 2m
+          labels:
+            severity: critical
+            service: shop
+          annotations:
+            summary: "shop-api {{ "{{" }} $labels.version {{ "}}" }}: доля ошибок {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+            description: >-
+              Больше {{ mulf $a.errorRateThreshold 100 }}% запросов к версии api завершаются ошибкой
+              (по метрикам inbound-прокси Linkerd) дольше 2 минут.
+            runbook: >-
+              1) Это v2 во время канарейки? Гейт должен был откатить сам — см. ShopCanaryRolledBack и логи shop-gate.
+              2) Это v1 или v2 после 100%? helm rollback / вернуть веса HTTPRoute shop-api вручную.
+              3) Какие коды: sum by (version, status_code) (rate(response_total{direction="inbound"}[2m])).
+
+        # 2. Ретраи прячут деградацию: клиент ошибок не видит, а backend уже сыплет 5xx
+        #    и каждая попытка — лишняя нагрузка. Алерт про то, что надёжность «в долг».
+        - alert: ShopApiRetriesMaskingFailures
+          expr: |
+            sum(rate(outbound_http_route_retry_requests_total{namespace="{{ $ns }}", parent_name="{{ include "shop.fullname" . }}-api"}[5m]))
+              /
+            sum(rate(outbound_http_route_request_statuses_total{namespace="{{ $ns }}", parent_name="{{ include "shop.fullname" . }}-api"}[5m]))
+              > {{ $a.retryRatioThreshold }}
+          for: 5m
+          labels:
+            severity: warning
+            service: shop
+          annotations:
+            summary: "shop-api: ретраи mesh — {{ "{{" }} $value | humanizePercentage {{ "}}" }} от запросов"
+            description: >-
+              Больше {{ mulf $a.retryRatioThreshold 100 }}% запросов к api уходят на повтор. Клиенты пока
+              получают успешные ответы, но backend реально отвечает ошибками, а запас ретраев (limit) конечен.
+            runbook: >-
+              1) Какой backend фейлит: sum by (backend_name, http_status) (rate(outbound_http_route_backend_response_statuses_total[5m])).
+              2) Логи api этой версии: kubectl -n shop logs -l app.kubernetes.io/name=api,version=<v> --tail=50.
+              3) Включён ли FLAKY в values? helm get values shop -n shop.
+
+        # 3. Гейт откатил канарейку: релиз v2 остановлен, автоматически он больше не поедет.
+        #    Нужен человек — разобраться, что сломано в v2, и выкатить исправление.
+        - alert: ShopCanaryRolledBack
+          expr: max(gate_state{namespace="{{ $ns }}"}) == 2
+          labels:
+            severity: warning
+            service: shop
+          annotations:
+            summary: "Гейт откатил v2: 100% трафика снова на v1"
+            description: >-
+              Автопилот увидел у v2 ошибки или задержку выше порога и вернул её долю в 0%.
+              Пользователи не страдают, но релиз остановлен до ручного вмешательства.
+            runbook: >-
+              1) Почему откатил: kubectl -n shop logs deploy/shop-gate | grep ROLLBACK.
+              2) Ошибки v2 на дашборде «shop: mesh и канареечный релиз».
+              3) Исправить v2 и выкатить заново (helm upgrade): гейт перезапустится и начнёт с 10%.
+{{- end }}

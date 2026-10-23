@@ -1,0 +1,37 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- $ctx := dict "root" . "component" "networkpolicy" "tag" .Chart.AppVersion }}
+{{- $np := .Values.networkPolicy }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "shop.fullname" . }}-allow-postgres
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- toYaml $np.database.podLabels | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "shop.selectorLabels" (dict "root" . "component" "api") | nindent 14 }}
+        - podSelector:
+            matchLabels:
+              {{- include "shop.selectorLabels" (dict "root" . "component" "worker") | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $np.database.port }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.cnpgOperator.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $np.cnpgOperator.podLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $np.database.statusPort }}
+{{- end }}

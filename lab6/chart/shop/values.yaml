@@ -1,0 +1,274 @@
+# Метка app.kubernetes.io/part-of на всех подах (требует политика require-ownership-labels)
+partOf: shop
+
+image:
+  # Префикс обязан попадать под политику restrict-image-registries
+  registry: registry.local/shop
+  # Реестра registry.local не существует: образы лежат только в containerd ноды
+  pullPolicy: IfNotPresent
+
+# Общий securityContext контейнеров (политика disallow-privileged-containers)
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+database:
+  clusterName: shop-db
+  secretKey: uri
+  name: shop
+  owner: shop
+  instances: 1
+  storageSize: 1Gi
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 256Mi
+  enablePDB: false
+
+api:
+  image: api
+  port: 8080
+  # HEALTH_FAIL=true заставляет /health отвечать 500 (сломанный релиз, Часть 2)
+  healthFail: false
+  # Лаба 6: версии api. Каждая — свой Deployment shop-api-<версия> и Service для traffic split.
+  # replicas/tag были общими для api в Лабе 5, теперь — у каждой версии свои.
+  versions:
+    v1:
+      enabled: true
+      replicas: 2
+      tag: v1
+      flaky: false
+      flakyRate: 0.3
+    v2:
+      enabled: true
+      replicas: 1
+      tag: v2
+      fail: false
+  resources:
+    requests:
+      cpu: 60m
+      memory: 100Mi
+    limits:
+      cpu: 60m
+      memory: 100Mi
+  service:
+    type: NodePort
+    nodePort: 30080
+    externalTrafficPolicy: Local
+
+worker:
+  replicas: 2
+  image: worker
+  tag: "0.1.0"
+  port: 8080
+  healthFail: false
+  pollInterval: 2s
+  batchSize: 10
+  resources:
+    requests:
+      cpu: 10m
+      memory: 100Mi
+    limits:
+      memory: 100Mi
+
+# Обновление без потери запросов
+rollout:
+  maxSurge: 1
+  maxUnavailable: 0
+  # Пауза перед SIGTERM: за это время под успевает исчезнуть из EndpointSlice
+  # и kube-proxy на нодах, и новые запросы перестают на него приходить
+  preStopSleepSeconds: 5
+  terminationGracePeriodSeconds: 30
+
+monitoring:
+  enabled: true
+  interval: 15s
+  alerts:
+    errorRateThreshold: 0.05
+    workerStalledSeconds: 60
+  # Лаба 5: метрики Cilium (PodMonitor агента) и Hubble (ServiceMonitor hubble-metrics)
+  cilium:
+    enabled: true
+    namespace: kube-system
+  networkAlerts:
+    for: 1m
+    # Доля заполнения CT map, после которой пора расширять (при 1.0 новые потоки дропаются)
+    ctMapPressureThreshold: 0.8
+  # Лаба 6: алерты по метрикам mesh (prometheusrule-mesh.yaml)
+  meshAlerts:
+    errorRateThreshold: 0.05
+    retryRatioThreshold: 0.1
+
+
+# Разнесение реплик api по нодам (Часть 1)
+placement:
+  # topologySpread | antiAffinity
+  mechanism: topologySpread
+  topologyKey: kubernetes.io/hostname
+  # topologySpread: максимально допустимая разница числа подов между нодами
+  maxSkew: 1
+  # topologySpread: DoNotSchedule (жёстко) | ScheduleAnyway (мягко)
+  whenUnsatisfiable: DoNotSchedule
+  # antiAffinity: required (жёстко) | preferred (мягко)
+  antiAffinityMode: required
+
+# Фоновая нагрузка (Часть 2). Реплики/CPU/память крутим здесь в Частях 6-7.
+batch:
+  # Лаба 5: batch выключен, чтобы не вытеснял мониторинг и не мешал сетевым опытам
+  replicas: 0
+  image: batch
+  tag: "0.1.0"
+  port: 8080
+  cpuWorkers: 1
+  cpuDuty: 0.5
+  memTargetMB: 64
+  memStepMB: 16
+  memStepInterval: 2s
+  # Исходная догадка. Burstable: requests заметно ниже limits (Часть 5)
+  resources:
+    requests:
+      cpu: 500m
+      memory: 64Mi
+    limits:
+      memory: 560Mi
+
+# Лаба 5
+loadgen:
+  enabled: true
+  replicas: 1
+  image: loadgen
+  # Лаба 6: 0.2.0 — мелкие корзины гистограммы, счётчик ответов по версии api, GET /probe
+  tag: "0.2.0"
+  port: 8080
+  rps: 20
+  keepAlive: false
+  timeout: 2s
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 32Mi
+
+priority:
+  critical:
+    name: shop-critical
+    value: 100000
+    description: Критический путь заказа (api, postgres, worker)
+  background:
+    name: shop-background
+    value: -1000
+    description: Фоновая нагрузка (batch)
+
+pdb:
+  enabled: true
+  api:
+    maxUnavailable: 1
+  database:
+    minAvailable: 1
+    selectorLabels:
+      cnpg.io/cluster: shop-db
+      cnpg.io/instanceRole: primary
+
+# Лаба 5: zero-trust networkPolicy
+networkPolicy:
+  enabled: true
+  clientCIDRs:
+    - 192.168.49.1/32
+  dns:
+    enabled: true
+    # Кому нужен DNS (матрица, Часть 3). postgres — нет: при instances: 1 он имён не резолвит
+    clients: [api, worker, loadgen, gate]
+    namespace: kube-system
+    podLabels:
+      k8s-app: kube-dns
+    port: 53
+  monitoring:
+    namespace: monitoring
+    podLabels:
+      app.kubernetes.io/name: prometheus
+  cnpgOperator:
+    namespace: cnpg-system
+    podLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  database:
+    podLabels:
+      cnpg.io/cluster: shop-db
+      cnpg.io/podRole: instance
+    port: 5432
+    statusPort: 8000
+  apiServerPort: 8443
+
+# Лаба 6: service mesh (Linkerd). Аннотации кладутся на поды api (все версии) и loadgen.
+mesh:
+  # false — baseline Части 2 (без sidecar, без HTTPRoute, без гейта)
+  enabled: true
+  podAnnotations:
+    linkerd.io/inject: enabled
+    # Ресурсы sidecar'а: без них не пустит политика require-resource-limits (Лаба 3)
+    config.linkerd.io/proxy-cpu-request: 20m
+    config.linkerd.io/proxy-memory-request: 32Mi
+    config.linkerd.io/proxy-memory-limit: 64Mi
+  # Ретраи в клиентском прокси (аннотации на HTTPRoute), Часть 4
+  retries:
+    enabled: true
+    statuses: 5xx
+    limit: 3
+    # Таймаут ОДНОЙ попытки. 300ms обрывал редкие медленные INSERT, и POST повторялся,
+    # хотя первая попытка могла уже записать заказ. 1s ≈ 12x baseline p99
+    timeout: 1s
+  # Рёбра для sidecar'ов поверх zero-trust из Лабы 5
+  networkPolicy:
+    meshedComponents: [api, loadgen]
+    controlPlaneNamespace: linkerd
+    inboundPort: 4143
+    adminPort: 4191
+
+# Лаба 6: стартовые веса traffic split (HTTPRoute). Во время релиза их меняет гейт.
+canary:
+  weights:
+    v1: 90
+    v2: 10
+
+# Лаба 6: гейт канареечного релиза
+gate:
+  # Работает только вместе с mesh.enabled и api.versions.v2.enabled
+  enabled: true
+  image: gate
+  # 0.1.1 — прогрев после смены веса (0.1.0 повышал плохую v2 на устаревших данных)
+  # 0.1.2 — на старте релиза не решать ничего (0.1.1 откатил хорошую v2 по ошибкам старой)
+  tag: "0.1.2"
+  prometheusURL: http://kps-kube-prometheus-stack-prometheus.monitoring:9090
+  interval: 15s
+  # Окно rate() в запросах к Prometheus
+  window: 1m
+  # Доля v2 по шагам, %
+  steps: [10, 25, 50, 75, 100]
+  # После смены веса не повышаем, пока окно rate() не заполнится новыми данными
+  warmup: 1m
+  # Старт релиза: запас на выкатку нового пода v2; решений нет startDelay + warmup
+  startDelay: 30s
+  # Сколько здоровых проверок подряд нужно для следующего шага
+  healthyChecks: 2
+  maxErrorRate: 0.05
+  maxP95ms: 300
+  # Меньше — мало данных для решения, гейт ждёт
+  minRPS: 0.5
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 32Mi
