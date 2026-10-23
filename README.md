@@ -30,7 +30,7 @@
 | 3 | [**Собираем платформу для shop**](./lab3) | Helm, Kyverno, CloudNativePG, FreeLens | ✅ Done |
 | 4 | [**SLA критического пути под перегрузкой**](./lab4) | Affinity/Spread, PriorityClass, preemption, KRR | ✅ Done |
 | 5 | [**Zero-trust сеть с доказательством**](./lab5) | Cilium, Hubble, NetworkPolicy, chaos-тесты | ✅ Done |
-| 6 | [**Автопилот релиза: катит хорошее, откатывает плохое**](./lab6) | Linkerd, mTLS, traffic split, canary | 🚧 In progress |
+| 6 | [**Автопилот релиза: катит хорошее, откатывает плохое**](./lab6) | Linkerd, mTLS, traffic split, canary | ✅ Done (🐸) |
 | 7 | ~~MLOps~~ | — | ⛔ Не выполняется |
 | 8 | [**Автоматизация devops-процесса с n8n + AI**](./lab8) | n8n, AI-агенты, GitHub, Prometheus, Grafana | ✅ Done |
 
@@ -92,12 +92,9 @@
 </details>
 
 <details>
-<summary><b>Лаба 6 — Автопилот релиза</b> 🚧</summary>
+<summary><b>Лаба 6 — Автопилот релиза</b></summary>
 
 <br>
-
-> [!WARNING]
-> **IN PROGRESS** — работа выполняется, отчёт отсутствует.
 
 Service mesh (Linkerd): baseline без mesh, mTLS, ретраи и таймауты «бесплатно», v1/v2 и traffic split, автопилот, который сам катит хороший релиз и откатывает плохой, цена mesh и мониторинг.
 
