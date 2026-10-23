@@ -1,0 +1,64 @@
+{{- if and .Values.networkPolicy.enabled .Values.mesh.enabled }}
+{{- $ctx := dict "root" . "component" "networkpolicy" "tag" .Chart.AppVersion }}
+{{- $np := .Values.networkPolicy }}
+{{- $m := .Values.mesh.networkPolicy }}
+# Лаба 6: дополнительные рёбра, которые нужны sidecar'ам Linkerd. Политики аддитивны:
+# allow-api / allow-loadgen из Лабы 5 остаются как есть, здесь — только то, что добавил mesh.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "shop.fullname" . }}-allow-linkerd
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  # Все поды релиза, в которые инжектится прокси
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          {{- toYaml $m.meshedComponents | nindent 10 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Prometheus скрейпит метрики прокси (linkerd-admin)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.monitoring.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $np.monitoring.podLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: {{ $m.adminPort }}
+    # mTLS-соединения между прокси приходят на inbound-порт прокси
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  {{- toYaml $m.meshedComponents | nindent 18 }}
+      ports:
+        - protocol: TCP
+          port: {{ $m.inboundPort }}
+  egress:
+    # Control plane: identity (сертификаты), destination и policy (эндпоинты, маршруты, веса)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $m.controlPlaneNamespace }}
+    # Прокси клиента ходит прямо на inbound-порт прокси сервера
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  {{- toYaml $m.meshedComponents | nindent 18 }}
+      ports:
+        - protocol: TCP
+          port: {{ $m.inboundPort }}
+{{- end }}

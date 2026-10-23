@@ -1,0 +1,43 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.cilium.enabled }}
+{{- $ctx := dict "root" . "component" "monitoring" "tag" .Chart.AppVersion }}
+{{- $c := .Values.monitoring.cilium }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "shop.fullname" . }}-cilium-agent
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ $c.namespace }}
+  selector:
+    matchLabels:
+      k8s-app: cilium
+  podMetricsEndpoints:
+    - port: prometheus
+      interval: {{ .Values.monitoring.interval }}
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "shop.fullname" . }}-hubble
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ $c.namespace }}
+  selector:
+    matchLabels:
+      k8s-app: hubble
+  endpoints:
+    - port: hubble-metrics
+      interval: {{ .Values.monitoring.interval }}
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+{{- end }}

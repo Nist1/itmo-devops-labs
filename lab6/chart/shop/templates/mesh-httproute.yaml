@@ -1,0 +1,40 @@
+{{- if .Values.mesh.enabled }}
+{{- $ctx := dict "root" . "component" "api" "tag" .Values.api.versions.v1.tag }}
+{{- $api := printf "%s-api" (include "shop.fullname" .) }}
+# Лаба 6: traffic split как объект mesh.
+# parentRef — Service shop-api: Linkerd применяет маршрут в прокси КЛИЕНТА, когда тот
+# ходит на shop-api, и раскладывает запросы по backendRefs пропорционально weight.
+# Веса во время релиза меняет гейт (JSON Patch), здесь — только стартовые значения.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $api }}
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+  {{- with .Values.mesh.retries }}
+  {{- if .enabled }}
+  annotations:
+    # Ретраи делает клиентский прокси: на какие ответы, сколько раз, таймаут попытки
+    retry.linkerd.io/http: {{ .statuses | quote }}
+    retry.linkerd.io/limit: {{ .limit | quote }}
+    retry.linkerd.io/timeout: {{ .timeout | quote }}
+  {{- end }}
+  {{- end }}
+spec:
+  parentRefs:
+    - group: ""
+      kind: Service
+      name: {{ $api }}
+      port: {{ .Values.api.port }}
+  rules:
+    - backendRefs:
+        {{- /* Порядок важен: гейт патчит backendRefs/0 (v1) и backendRefs/1 (v2) */}}
+        - name: {{ $api }}-v1
+          port: {{ .Values.api.port }}
+          weight: {{ .Values.canary.weights.v1 }}
+        {{- if .Values.api.versions.v2.enabled }}
+        - name: {{ $api }}-v2
+          port: {{ .Values.api.port }}
+          weight: {{ .Values.canary.weights.v2 }}
+        {{- end }}
+{{- end }}

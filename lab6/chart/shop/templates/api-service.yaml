@@ -1,0 +1,54 @@
+{{- $ctx := dict "root" . "component" "api" "tag" .Values.api.versions.v1.tag }}
+# Общий Service: клиенты ходят сюда, селектор без версии — видит поды v1 и v2.
+# Без mesh kube-proxy делит трафик пропорционально числу подов.
+# С mesh клиентский прокси видит HTTPRoute с parentRef на этот Service и делит по весам.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shop.fullname" . }}-api
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  type: {{ .Values.api.service.type }}
+  selector:
+    {{- include "shop.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.api.port }}
+      targetPort: http
+      {{- if and (eq .Values.api.service.type "NodePort") .Values.api.service.nodePort }}
+      nodePort: {{ .Values.api.service.nodePort }}
+      {{- end }}
+  {{- if and (has .Values.api.service.type (list "NodePort" "LoadBalancer")) .Values.api.service.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ .Values.api.service.externalTrafficPolicy }}
+  {{- end }}
+{{- /* Service на каждую версию — бэкенды для traffic split (backendRefs в HTTPRoute) */}}
+{{- range $name, $v := .Values.api.versions }}
+{{- if $v.enabled }}
+{{- $vctx := dict "root" $ "component" "api" "tag" $v.tag }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shop.fullname" $ }}-api-{{ $name }}
+  labels:
+    {{- include "shop.labels" $vctx | nindent 4 }}
+    version: {{ $name }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "shop.selectorLabels" $vctx | nindent 4 }}
+    version: {{ $name }}
+  ports:
+    - name: http
+      port: {{ $.Values.api.port }}
+      targetPort: http
+{{- end }}
+{{- end }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "shop.fullname" . }}-api
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}

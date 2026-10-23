@@ -1,0 +1,96 @@
+{{- /*
+Лаба 6: по Deployment на каждую версию api из values.api.versions (v1, v2).
+Одна и та же спецификация, отличаются образ (api:v1 / api:v2), метка version
+и переключатели FAIL / FLAKY.
+*/ -}}
+{{- range $name, $v := .Values.api.versions }}
+{{- if $v.enabled }}
+{{- $ctx := dict "root" $ "component" "api" "tag" $v.tag }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shop.fullname" $ }}-api-{{ $name }}
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+    version: {{ $name }}
+spec:
+  replicas: {{ $v.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # maxUnavailable 0: старый под удаляется только когда новый уже Ready.
+      maxSurge: {{ $.Values.rollout.maxSurge }}
+      maxUnavailable: {{ $.Values.rollout.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "shop.selectorLabels" $ctx | nindent 6 }}
+      version: {{ $name }}
+  template:
+    metadata:
+      # Метки шаблона пода проверяет политика (через autogen) — part-of обязателен здесь
+      labels:
+        {{- include "shop.labels" $ctx | nindent 8 }}
+        version: {{ $name }}
+      {{- include "shop.meshAnnotations" $ | nindent 6 }}
+    spec:
+      # Своя ServiceAccount: в mesh identity пода = сертификат на имя этой SA
+      serviceAccountName: {{ include "shop.fullname" $ }}-api
+      terminationGracePeriodSeconds: {{ $.Values.rollout.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml $.Values.podSecurityContext | nindent 8 }}
+      {{- include "shop.placement" $ctx | nindent 6 }}
+      priorityClassName: {{ $.Values.priority.critical.name }}
+      containers:
+        - name: api
+          image: "{{ $.Values.image.registry }}/{{ $.Values.api.image }}:{{ $v.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - name: PORT
+              value: {{ $.Values.api.port | quote }}
+            # HEALTH_FAIL=true заставляет /health отвечать 500 (Лаба 5, break.sh).
+            # Общий для всех версий, можно переопределить в api.versions.<v>.healthFail
+            - name: HEALTH_FAIL
+              value: {{ $v.healthFail | default $.Values.api.healthFail | quote }}
+            # FAIL=true — POST /order всегда 500 (плохой релиз, Часть 7)
+            - name: FAIL
+              value: {{ $v.fail | default false | quote }}
+            # FLAKY=true — POST /order падает 503 с вероятностью FLAKY_RATE (Часть 4)
+            - name: FLAKY
+              value: {{ $v.flaky | default false | quote }}
+            - name: FLAKY_RATE
+              value: {{ $v.flakyRate | default 0.3 | quote }}
+            # optional: true — без секрета БД под всё равно стартует (503 на /order)
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.database.clusterName }}-app
+                  key: {{ $.Values.database.secretKey }}
+                  optional: true
+          ports:
+            - name: http
+              containerPort: {{ $.Values.api.port }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              # В distroless нет shell и sleep — используем встроенное действие kubelet
+              sleep:
+                seconds: {{ $.Values.rollout.preStopSleepSeconds }}
+          securityContext:
+            {{- toYaml $.Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml $.Values.api.resources | nindent 12 }}
+{{- end }}
+{{- end }}

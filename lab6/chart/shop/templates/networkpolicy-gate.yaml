@@ -1,0 +1,59 @@
+{{- if and .Values.networkPolicy.enabled .Values.mesh.enabled .Values.gate.enabled }}
+{{- $ctx := dict "root" . "component" "networkpolicy" "tag" .Chart.AppVersion }}
+{{- $np := .Values.networkPolicy }}
+# Лаба 6: гейт читает Prometheus и патчит HTTPRoute через API-сервер
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "shop.fullname" . }}-allow-gate
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "shop.selectorLabels" (dict "root" . "component" "gate") | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.monitoring.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $np.monitoring.podLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.monitoring.namespace }}
+          podSelector:
+            matchLabels:
+              {{- toYaml $np.monitoring.podLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 9090
+---
+# Как у postgres в Лабе 5: API-сервер — identity kube-apiserver, ipBlock его не выбирает
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "shop.fullname" . }}-gate-to-apiserver
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "shop.selectorLabels" (dict "root" . "component" "gate") | nindent 6 }}
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: {{ $np.apiServerPort | quote }}
+              protocol: TCP
+{{- end }}

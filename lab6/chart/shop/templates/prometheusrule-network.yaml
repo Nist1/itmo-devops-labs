@@ -1,0 +1,69 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.cilium.enabled }}
+{{- $ctx := dict "root" . "component" "monitoring" "tag" .Chart.AppVersion }}
+{{- $ns := .Release.Namespace }}
+{{- $a := .Values.monitoring.networkAlerts }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "shop.fullname" . }}-network-alerts
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  groups:
+    - name: shop.network
+      rules:
+        - alert: ShopEgressDeniedByPolicy
+          expr: |
+            sum by (source_workload, destination_namespace, destination_workload) (
+              rate(hubble_drop_total{reason="POLICY_DENIED", traffic_direction="egress",
+                                     source_namespace="{{ $ns }}", destination_workload!="coredns"}[2m])
+            ) > 0
+          for: {{ $a.for }}
+          labels:
+            severity: critical
+            service: shop
+          annotations:
+            summary: "{{ "{{" }} $labels.source_workload {{ "}}" }} → {{ "{{" }} $labels.destination_namespace {{ "}}" }}/{{ "{{" }} $labels.destination_workload {{ "}}" }}: исходящий трафик режется политикой"
+            description: >-
+              Под shop пытается открыть соединение, которого нет в матрице доступа: либо сломана
+              allow-политика, либо под делает то, чего не должен.
+            runbook: >-
+              hubble observe -n {{ $ns }} --verdict DROPPED -o compact; сверить ребро с матрицей
+              (README, Часть 3) и части allow-политики (podSelector, to, ports) с реальными метками и портами.
+
+        - alert: ShopDNSBlocked
+          expr: |
+            sum by (source_workload) (
+              rate(hubble_drop_total{reason="POLICY_DENIED", source_namespace="{{ $ns }}",
+                                     destination_namespace="kube-system", destination_workload="coredns"}[2m])
+            ) > 0
+          for: {{ $a.for }}
+          labels:
+            severity: critical
+            service: shop
+          annotations:
+            summary: "{{ "{{" }} $labels.source_workload {{ "}}" }}: DNS-запросы режутся политикой"
+            description: >-
+              Под shop не может достучаться до CoreDNS: сервисы перестают находить друг друга по имени,
+              пулы к БД умирают при первом переподключении.
+            runbook: >-
+              kubectl -n {{ $ns }} get networkpolicy {{ include "shop.fullname" . }}-allow-dns -o yaml;
+              сверить podSelector (dns.clients), метки kube-dns и порт 53 UDP/TCP с Service kube-dns.
+
+        - alert: CiliumConntrackMapPressure
+          expr: |
+            max by (node, map_name) (cilium_bpf_map_pressure{map_name=~"ct.*_global"})
+              > {{ $a.ctMapPressureThreshold }}
+          for: 5m
+          labels:
+            severity: warning
+            service: shop
+          annotations:
+            summary: "{{ "{{" }} $labels.node {{ "}}" }}: CT map {{ "{{" }} $labels.map_name {{ "}}" }} заполнена на {{ "{{" }} $value | humanizePercentage {{ "}}" }}"
+            description: >-
+              Таблица соединений Cilium близка к переполнению. При 100% новые потоки дропаются
+              (CT: Map insertion failed) — так в Части 2 пропадали DNS-запросы.
+            runbook: >-
+              Кто плодит потоки: hubble_flows_processed_total по namespace; DNS с ndots:5 без точки на конце;
+              поднять bpf.ctAnyMax / ctTcpMax в cilium-values и rollout restart ds/cilium.
+{{- end }}

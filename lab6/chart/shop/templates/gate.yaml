@@ -1,0 +1,134 @@
+{{- if and .Values.mesh.enabled .Values.gate.enabled }}
+{{- $ctx := dict "root" . "component" "gate" "tag" .Values.gate.tag }}
+{{- $ns := .Release.Namespace }}
+{{- $api := printf "%s-api" (include "shop.fullname" .) }}
+{{- /* Метрики inbound-прокси Linkerd на подах v2. tls="true" — только запросы из mesh
+       (без проб kubelet и скрейпов Prometheus). Метку version добавляет PodMonitor. */}}
+{{- $sel := printf "namespace=\"%s\", version=\"v2\", direction=\"inbound\", tls=\"true\"" $ns }}
+{{- $w := .Values.gate.window }}
+# Лаба 6: гейт канареечного релиза. Логика — в gate/main.go, правила — в values.gate.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "shop.fullname" . }}-gate
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  # Recreate: два гейта одновременно дрались бы за веса
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "shop.selectorLabels" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shop.labels" $ctx | nindent 8 }}
+      annotations:
+        # Новый релиз v2 (смена образа/FAIL) или правил гейта → под гейта пересоздаётся
+        # и начинает выкатку заново с первого шага
+        checksum/release: {{ dict "v2" .Values.api.versions.v2 "gate" .Values.gate | toJson | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "shop.fullname" . }}-gate
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: gate
+          image: "{{ .Values.image.registry }}/{{ .Values.gate.image }}:{{ .Values.gate.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PROM_URL
+              value: {{ .Values.gate.prometheusURL | quote }}
+            - name: NAMESPACE
+              value: {{ $ns | quote }}
+            - name: ROUTE_NAME
+              value: {{ $api | quote }}
+            - name: V1_BACKEND
+              value: {{ printf "%s-v1" $api | quote }}
+            - name: V2_BACKEND
+              value: {{ printf "%s-v2" $api | quote }}
+            - name: INTERVAL
+              value: {{ .Values.gate.interval | quote }}
+            - name: STEPS
+              value: {{ join "," .Values.gate.steps | quote }}
+            - name: WARMUP
+              value: {{ .Values.gate.warmup | quote }}
+            - name: START_DELAY
+              value: {{ .Values.gate.startDelay | quote }}
+            - name: HEALTHY_CHECKS
+              value: {{ .Values.gate.healthyChecks | quote }}
+            - name: MAX_ERROR_RATE
+              value: {{ .Values.gate.maxErrorRate | quote }}
+            - name: MAX_P95_MS
+              value: {{ .Values.gate.maxP95ms | quote }}
+            - name: MIN_RPS
+              value: {{ .Values.gate.minRPS | quote }}
+            - name: QUERY_RPS
+              value: {{ printf "sum(rate(response_total{%s}[%s]))" $sel $w | quote }}
+            - name: QUERY_ERROR_RATE
+              value: {{ printf "sum(rate(response_total{%s, classification=\"failure\"}[%s])) / sum(rate(response_total{%s}[%s]))" $sel $w $sel $w | quote }}
+            - name: QUERY_P95_MS
+              value: {{ printf "histogram_quantile(0.95, sum by (le) (rate(response_latency_ms_bucket{%s}[%s])))" $sel $w | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.gate.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "shop.fullname" . }}-gate
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+spec:
+  selector:
+    {{- include "shop.selectorLabels" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "shop.fullname" . }}-gate
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+---
+# Минимальные права: читать и патчить только свой HTTPRoute
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "shop.fullname" . }}-gate
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+rules:
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes]
+    resourceNames: [{{ $api }}]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "shop.fullname" . }}-gate
+  labels:
+    {{- include "shop.labels" $ctx | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "shop.fullname" . }}-gate
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "shop.fullname" . }}-gate
+    namespace: {{ $ns }}
+{{- end }}

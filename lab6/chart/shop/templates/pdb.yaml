@@ -1,0 +1,27 @@
+{{- if .Values.pdb.enabled }}
+{{- $api := dict "root" . "component" "api" "tag" .Values.api.versions.v1.tag }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "shop.fullname" . }}-api
+  labels:
+    {{- include "shop.labels" $api | nindent 4 }}
+spec:
+  maxUnavailable: {{ .Values.pdb.api.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "shop.selectorLabels" $api | nindent 6 }}
+---
+{{- $db := dict "root" . "component" "postgres" "tag" "operator-default" }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Values.database.clusterName }}-primary-pdb
+  labels:
+    {{- include "shop.labels" $db | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.database.minAvailable }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.pdb.database.selectorLabels | nindent 6 }}
+{{- end }}
